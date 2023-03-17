@@ -5,6 +5,7 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import erc20ABI from "../abi/erc20.json";
 
 export type TokensAddresses = {
+  uwu: string;
   dai: string;
   frax: string;
   weth: string;
@@ -21,6 +22,7 @@ export type TokensAddresses = {
 };
 
 const tokensDecimals: Record<keyof TokensAddresses, number> = {
+  uwu: 18,
   dai: 18,
   frax: 18,
   weth: 18,
@@ -39,6 +41,7 @@ const tokensDecimals: Record<keyof TokensAddresses, number> = {
 export const getTokensDecimals = async (hre: HardhatRuntimeEnvironment): Promise<Record<keyof TokensAddresses, number>>  => tokensDecimals;
 
 const tokensAddresses: TokensAddresses = {
+  uwu: '0x55C08ca52497e2f1534B59E2917BF524D4765257',
   dai: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
   frax: '0x853d955aCEf822Db058eb8505911ED77F175b99e',
   weth: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
@@ -55,6 +58,7 @@ const tokensAddresses: TokensAddresses = {
 };
 
 export type TokensContracts = {
+  uwu: IERC20;
   dai: IERC20;
   frax: IERC20;
   weth: IERC20;
@@ -71,6 +75,7 @@ export type TokensContracts = {
 };
 
 export const getTokensContracts = async (hre: HardhatRuntimeEnvironment): Promise<TokensContracts> => {
+  const uwu = await hre.ethers.getContractAt(erc20ABI, tokensAddresses.uwu) as IERC20;
   const dai = await hre.ethers.getContractAt(erc20ABI, tokensAddresses.dai) as IERC20;
   const frax = await hre.ethers.getContractAt(erc20ABI, tokensAddresses.frax) as IERC20;
   const weth = await hre.ethers.getContractAt(erc20ABI, tokensAddresses.weth) as IERC20;
@@ -85,10 +90,11 @@ export const getTokensContracts = async (hre: HardhatRuntimeEnvironment): Promis
   const sifum = await hre.ethers.getContractAt(erc20ABI, tokensAddresses.sifum) as IERC20;
   const blusd = await hre.ethers.getContractAt(erc20ABI, tokensAddresses.blusd) as IERC20;
 
-  return { dai, frax, weth, wbtc, sifu, mim, lusd, sspell, crv, wmemo, usdt, sifum, blusd };
+  return { uwu, dai, frax, weth, wbtc, sifu, mim, lusd, sspell, crv, wmemo, usdt, sifum, blusd };
 }
 
 export type TokensHolders = {
+  uwu: SignerWithAddress;
   dai: SignerWithAddress;
   frax: SignerWithAddress;
   weth: SignerWithAddress;
@@ -105,6 +111,7 @@ export type TokensHolders = {
 };
 
 export const getTokensHolders = async (hre: HardhatRuntimeEnvironment): Promise<TokensHolders> => {
+  const uwu: SignerWithAddress = await hre.ethers.getImpersonatedSigner('0xC671A6B1415dE6549B05775Ee4156074731190c6');
   const dai: SignerWithAddress = await hre.ethers.getImpersonatedSigner('0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643');
   const frax: SignerWithAddress = await hre.ethers.getImpersonatedSigner('0xDcEF968d416a41Cdac0ED8702fAC8128A64241A2');
   const weth: SignerWithAddress = await hre.ethers.getImpersonatedSigner('0xF04a5cC80B1E94C69B48f5ee68a08CD2F09A7c3E');
@@ -118,7 +125,8 @@ export const getTokensHolders = async (hre: HardhatRuntimeEnvironment): Promise<
   const usdt: SignerWithAddress = await hre.ethers.getImpersonatedSigner('0x5041ed759Dd4aFc3a72b8192C143F72f4724081A');
   const sifum: SignerWithAddress = await hre.ethers.getImpersonatedSigner('0x5DD596C901987A2b28C38A9C1DfBf86fFFc15d77');
   const blusd: SignerWithAddress = await hre.ethers.getImpersonatedSigner('0x74ED5d42203806c8CDCf2F04Ca5F60DC777b901c');
-
+  
+  await hre.ethers.provider.send("hardhat_setBalance", [uwu.address, BigNumber.from('1000000000000000000000').toHexString()]);
   await hre.ethers.provider.send("hardhat_setBalance", [dai.address, BigNumber.from('1000000000000000000000').toHexString()]);
   await hre.ethers.provider.send("hardhat_setBalance", [frax.address, BigNumber.from('1000000000000000000000').toHexString()]);
   await hre.ethers.provider.send("hardhat_setBalance", [weth.address, BigNumber.from('1000000000000000000000').toHexString()]);
@@ -133,5 +141,5 @@ export const getTokensHolders = async (hre: HardhatRuntimeEnvironment): Promise<
   await hre.ethers.provider.send("hardhat_setBalance", [sifum.address, BigNumber.from('1000000000000000000000').toHexString()]);
   await hre.ethers.provider.send("hardhat_setBalance", [blusd.address, BigNumber.from('1000000000000000000000').toHexString()]);
 
-  return { dai, frax, weth, wbtc, sifu, mim, lusd, sspell, crv, wmemo, usdt, sifum, blusd };
+  return { uwu, dai, frax, weth, wbtc, sifu, mim, lusd, sspell, crv, wmemo, usdt, sifum, blusd };
 }

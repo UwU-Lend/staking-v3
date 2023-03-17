@@ -6,6 +6,7 @@ import hre, { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import distributorABI from '../../abi/MultiFeeDistributionV2.json';
 import kyberSwapNFTABI from '../../abi/KyberSwapNFT.json';
+import { token } from "../../typechain-types/@openzeppelin/contracts";
 
 const DISTRIBUTOR_ADDRESS = '0x0a7B2A21027F92243C5e5E777aa30BB7969b0188';
 const KYBERSWAP_NFT_ADDRESS = '0x2B1c7b41f6A8F2b2bc45C3233a5d5FB3cD6dC9A8';
@@ -18,6 +19,7 @@ type ReplaceTreasuryFixtureResult = {
   nftIds: [number, number, number];
   nftOwners: [SignerWithAddress, SignerWithAddress, SignerWithAddress];
   nft: Contract;
+  minterSigner: SignerWithAddress;
   tokens: {
     contracts: Record<keyof TokensContracts, Contract>;
     decimals: Record<keyof TokensContracts, number>;
@@ -35,12 +37,14 @@ export const ReplaceTreasuryFixture = async (): Promise<ReplaceTreasuryFixtureRe
   const owner0: string = await kyberSwapNFT.ownerOf(KYBERSWAP_NFT_IDS[0]);
   const owner1: string = await kyberSwapNFT.ownerOf(KYBERSWAP_NFT_IDS[1]);
   const owner2: string = await kyberSwapNFT.ownerOf(KYBERSWAP_NFT_IDS[2]);
-  const signer0 = await ethers.getImpersonatedSigner(owner0);
-  const signer1 = await ethers.getImpersonatedSigner(owner1);
-  const signer2 = await ethers.getImpersonatedSigner(owner2);
+  const signer0: SignerWithAddress = await ethers.getImpersonatedSigner(owner0);
+  const signer1: SignerWithAddress = await ethers.getImpersonatedSigner(owner1);
+  const signer2: SignerWithAddress = await ethers.getImpersonatedSigner(owner2);
+  const rewardTokenVaultSigner: SignerWithAddress = await ethers.getImpersonatedSigner(rewardTokenVaultAddress);
   await ethers.provider.send('hardhat_setBalance', [owner0, BigNumber.from('1000000000000000000000').toHexString()]);
   await ethers.provider.send('hardhat_setBalance', [owner1, BigNumber.from('1000000000000000000000').toHexString()]);
   await ethers.provider.send('hardhat_setBalance', [owner2, BigNumber.from('1000000000000000000000').toHexString()]);
+  await ethers.provider.send('hardhat_setBalance', [rewardTokenVaultSigner.address, BigNumber.from('1000000000000000000000').toHexString()]);
   const nftIds: [number, number, number] = [KYBERSWAP_NFT_IDS[0], KYBERSWAP_NFT_IDS[1], KYBERSWAP_NFT_IDS[2]];
   const nftOwners: [SignerWithAddress, SignerWithAddress, SignerWithAddress] = [signer0, signer1, signer2];
   const tokens = {
@@ -53,5 +57,9 @@ export const ReplaceTreasuryFixture = async (): Promise<ReplaceTreasuryFixtureRe
   const treasury: MultiFeeDistributionV3 = await MultiFeeDistributionV3Factory.deploy(KYBERSWAP_NFT_ADDRESS, poolId, tickRange, rewardTokenAddress, rewardTokenVaultAddress);
   await treasury.deployed();
   await treasury.setIncentivesController(incentivesControllerAddress);
-  return { treasury, nftIds, nftOwners, tokens, nft: kyberSwapNFT };
+  await treasury.setMinters([incentivesControllerAddress]);
+  await tokens.contracts.uwu.connect(rewardTokenVaultSigner).approve(treasury.address, ethers.constants.MaxUint256);
+  const minterSigner: SignerWithAddress = await ethers.getImpersonatedSigner(incentivesControllerAddress);
+  await ethers.provider.send("hardhat_setBalance", [minterSigner.address, BigNumber.from('1000000000000000000000').toHexString()]);
+  return { treasury, nftIds, nftOwners, tokens, nft: kyberSwapNFT, minterSigner };
 }

@@ -11,6 +11,8 @@ import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet
 import {IERC721} from '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
 
+import "hardhat/console.sol";
+
 contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
   using SafeMath for uint;
   using SafeERC20 for IERC20;
@@ -182,8 +184,15 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
   function accountLockedNFTs(address account) public view returns(
     LockedNFT[] memory lockedData
   ) {
-    uint256 idx;
+    uint256 count;
     uint256[] memory nftIds = lockedNFTs[account].values();
+    for (uint i = 0; i < nftIds.length; i++) {
+      if (nfts[nftIds[i]].unlockTime > block.timestamp) {
+        count++;
+      }
+    }
+    lockedData = new LockedNFT[](count);
+    uint256 idx;
     for (uint i = 0; i < nftIds.length; i++) {
       uint256 nftId = nftIds[i];
       uint256 unlockTime = nfts[nftId].unlockTime;
@@ -197,8 +206,15 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
   function accountUnlockableNFTs(address account) public view returns(
     LockedNFT[] memory unlockableData
   ) {
-    uint256 idx;
+    uint256 count;
     uint256[] memory nftIds = lockedNFTs[account].values();
+    for (uint i = 0; i < nftIds.length; i++) {
+      if (nfts[nftIds[i]].unlockTime <= block.timestamp) {
+        count++;
+      }
+    }
+    unlockableData = new LockedNFT[](count);
+    uint256 idx;
     for (uint i = 0; i < nftIds.length; i++) {
       uint256 nftId = nftIds[i];
       uint256 unlockTime = nfts[nftId].unlockTime;
@@ -290,10 +306,10 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
     address sender = msg.sender;
     _updateReward(sender);
     uint256[] memory nftIds = lockedNFTs[sender].values();
-    for (uint i = 0; i < nftIds.length; i++) {
+    for (uint256 i = 0; i < nftIds.length; i++) {
       uint256 nftId = nftIds[i];
-      uint256 liquidity = nfts[nftId].liquidity;
       if (nfts[nftId].unlockTime <= block.timestamp) {
+        uint256 liquidity = nfts[nftId].liquidity;
         liquiditySupply = liquiditySupply.sub(liquidity);
         liquidities[sender] = liquidities[sender].sub(liquidity);
         require(lockedNFTs[sender].remove(nftId), 'Fail to remove lockedNFTs');
