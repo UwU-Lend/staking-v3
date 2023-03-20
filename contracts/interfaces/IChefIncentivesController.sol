@@ -15,6 +15,10 @@ interface IChefIncentivesController {
     uint accRewardPerShare; // Accumulated rewards per share, times 1e12. See below.
     IOnwardIncentivesController onwardIncentives;
   }
+  struct EmissionPoint {
+    uint128 startTimeOffset;
+    uint128 rewardsPerSecond;
+  }
   function mintedTokens() external view returns (uint);
   function rewardsPerSecond() external view returns (uint);
   function startTime() external view returns(uint);
@@ -27,4 +31,6 @@ interface IChefIncentivesController {
   function addPool(address _token, uint256 _allocPoint) external;
   function claim(address _user, address[] calldata _tokens) external;
   function setClaimReceiver(address _user, address _receiver) external;
+  function emissionSchedule(uint256 index) external returns (EmissionPoint memory);
+  function maxMintableTokens() external returns (uint);
 }

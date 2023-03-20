@@ -11,8 +11,6 @@ import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet
 import {IERC721} from '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
 
-import "hardhat/console.sol";
-
 contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
   using SafeMath for uint;
   using SafeERC20 for IERC20;
@@ -22,8 +20,8 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
   event Locked(address indexed user, uint256 indexed nftId);
   event WithdrawnExpiredLocks(address indexed user, uint256 indexed nftId);
 
-  event Minted(address indexed user, uint256 amount);
-  event ExitedEarly(address indexed user, uint256 amount, uint256 penaltyAmount);
+  event Mint(address indexed user, uint256 amount);
+  event Exit(address indexed user, uint256 amount, uint256 penaltyAmount);
   event Withdrawn(address indexed user, uint256 indexed nftId);
   event RewardPaid(address indexed user, address indexed rewardsToken, uint256 reward);
   event PublicExit();
@@ -340,7 +338,7 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
     } else {
       earnings[idx-1].amount = earnings[idx-1].amount.add(amount);
     }
-    emit Minted(user, amount);
+    emit Mint(user, amount);
   }
 
   // Delegate exit
@@ -348,9 +346,9 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
     exitDelegatee[msg.sender] = delegatee;
   }
 
-  // Withdraw full unlocked balance and optionally claim pending rewards
-  function exitEarly(address onBehalfOf) external {
-    require(onBehalfOf == msg.sender || exitDelegatee[onBehalfOf] == msg.sender);
+  // Withdraw full unlocked balance
+  function exit(address onBehalfOf) external {
+    require(onBehalfOf == msg.sender || exitDelegatee[onBehalfOf] == msg.sender, 'Not authorized');
     _updateReward(onBehalfOf);
     (uint256 amount, uint256 penaltyAmount,) = withdrawableBalance(onBehalfOf);
     delete userEarnings[onBehalfOf];
@@ -361,7 +359,7 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
       incentivesController.claim(address(this), new address[](0));
       _notifyReward(address(rewardToken), penaltyAmount);
     }
-    emit ExitedEarly(onBehalfOf, amount, penaltyAmount);
+    emit Exit(onBehalfOf, amount, penaltyAmount);
   }
 
   // Withdraw staked tokens
