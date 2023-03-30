@@ -253,10 +253,10 @@ contract IncentivesControllerV3 is Ownable {
   function initiateUserInfo(address user, address token) internal {
     require(address(incentivesController) != address(0), 'incentives controller not set');
     if(!userInfoInitiated[token][user]) {
-      IChefIncentivesController.UserInfo memory userInfoV1 = incentivesController.userInfo(token, user);
+      IChefIncentivesController.UserInfo memory userInfoPrev = incentivesController.userInfo(token, user);
       userInfo[token][user] = UserInfo({
-        amount: userInfoV1.amount,
-        rewardDebt: userInfoV1.rewardDebt
+        amount: userInfoPrev.amount,
+        rewardDebt: userInfoPrev.rewardDebt
       });
       userInfoInitiated[token][user] = true;
     }
