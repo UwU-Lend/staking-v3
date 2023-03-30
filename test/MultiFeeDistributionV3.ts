@@ -364,6 +364,7 @@ describe("MultiFeeDistributionV3", () => {
   describe("lastTimeRewardApplicable", () => {
     it("Should be able to get last time reward applicable", async () => {
       const { treasury, tokens, minterSigner } = await loadFixture(ReplaceTreasuryFixture);
+      await time.increase(1);
       const rewardData0: RewardDataOutput = await treasury.rewardData(tokens.contracts.uwu.address);
       const lastTimeRewardApplicable0: BigNumber = await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
       const amountInWei0 = ethers.utils.parseEther('1000');

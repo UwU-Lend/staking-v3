@@ -52,7 +52,7 @@ const calcClaimableReward = (poolInfo: PoolInfo, userInfo: UserInfo, rewardsPerS
 }
 
 describe("IncentivesControllerV3", () => {
-  describe.skip("Deployment", () => {
+  describe("Deployment", () => {
     it("Should be deployed with correct parameters", async () => {
       const { controllerV2, controllerV3, rewardMinterV3 } = await loadFixture(incentivesControllerV3Fixture);
       expect(controllerV3.address).to.properAddress;
@@ -64,7 +64,7 @@ describe("IncentivesControllerV3", () => {
       expect(controller).to.equal(controllerV2.address);
     });
   });
-  describe.skip("setup", () => {
+  describe("setup", () => {
     it("Should be able to setup the controller with with correct parameters", async () => {
       const { controllerV2, controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
       await expect(controllerV3.setup()).to.be.not.reverted;
@@ -83,7 +83,7 @@ describe("IncentivesControllerV3", () => {
       await expect(controllerV3.setup()).to.be.reverted;
     });
   });
-  describe.skip("addPool", () => {
+  describe("addPool", () => {
     it("Should be able to add a pool", async () => {
       const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
       const configuratorSigner: SignerWithAddress = await ethers.getImpersonatedSigner(POOL_CONFIGURATOR);
@@ -100,7 +100,7 @@ describe("IncentivesControllerV3", () => {
       expect(poolInfo.onwardIncentives).to.equal(ethers.constants.AddressZero);
     });
   });
-  describe.skip("poolLength", () => {
+  describe("poolLength", () => {
     it("Should return correct pool length", async () => {
       const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
       const length0: BigNumber = await controllerV3.poolLength();
@@ -112,7 +112,7 @@ describe("IncentivesControllerV3", () => {
       expect(length1).to.equal(1);
     });
   });
-  describe.skip("handleAction", () => {
+  describe("handleAction", () => {
     it("Sould be receive data from v2", async () => {
       const { controllerV2, controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
       const [, user1] = await ethers.getSigners();
@@ -175,7 +175,7 @@ describe("IncentivesControllerV3", () => {
       expect(userInfo3.rewardDebt).to.be.equal(rewardDebt3);
     });
   });
-  describe.skip("claimableReward", () => {
+  describe("claimableReward", () => {
     it("Should be able to receive data from v2", async () => {
       const { controllerV2, controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
       const [, user1] = await ethers.getSigners();
@@ -246,7 +246,7 @@ describe("IncentivesControllerV3", () => {
       expect(claimableReward3[0]).to.be.equal(calcClaimableReward3);
     });
   });
-  describe.skip("claim", () => {
+  describe("claim", () => {
     it("Should be able to claim (call v2 handleAction)", async () => {
       const { controllerV2, controllerV3, rewardMinterV3, rewardToken, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
       const [, user1] = await ethers.getSigners();
@@ -371,13 +371,81 @@ describe("IncentivesControllerV3", () => {
     });
   });
 
-  describe("batchUpdateAllocPoint", () => {});
-  describe("setRewardMinter", () => {});
-  describe("setOnwardIncentives", () => {});
-  describe("setClaimReceiver", () => {});
+  describe("batchUpdateAllocPoint", () => {
+    it("Should be possible called only owner", async () => {
+      const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
+      const [owner, notOwner] = await ethers.getSigners();
+      await controllerV3.setup();
+      await expect(controllerV3.connect(notOwner).batchUpdateAllocPoint([ethers.constants.AddressZero], [0])).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(controllerV3.connect(owner).batchUpdateAllocPoint([await controllerV3.registeredTokens(0)], [0])).to.be.not.rejected;
+    });
+    it("Should be able update alloc points in batch", async () => {
+      const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
+      await controllerV3.setup();
+      const allocPoints = [1, 2, 3];
+      const tokens: string[] = await Promise.all([
+        controllerV3.registeredTokens(0),
+        controllerV3.registeredTokens(1),
+        controllerV3.registeredTokens(2),
+      ]);
+      await controllerV3.batchUpdateAllocPoint(tokens, allocPoints);
+      for (let i = 0; i < tokens.length; i++) {
+        const poolInfo = await controllerV3.poolInfo(tokens[i]);
+        expect(poolInfo.allocPoint).to.be.equal(allocPoints[i]);
+      }
+    });
+  });
+  describe("setRewardMinter", () => {
+    it("Should be possible called only owner", async () => {
+      const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
+      const [owner, notOwner] = await ethers.getSigners();
+      await expect(controllerV3.connect(notOwner).setRewardMinter(ethers.constants.AddressZero)).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(controllerV3.connect(owner).setRewardMinter(ethers.constants.AddressZero)).to.be.not.rejected;
+    });
+    it("Should be able set reward minter", async () => {
+      const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
+      const [owner, newMinter] = await ethers.getSigners();
+      await controllerV3.connect(owner).setRewardMinter(newMinter.address);
+      expect(await controllerV3.rewardMinter()).to.be.equal(newMinter.address);
+    });
+  });
+  describe("setOnwardIncentives", () => {
+    it("Should be possible called only owner", async () => {
+      const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
+      await controllerV3.setup();
+      const token: string = await controllerV3.registeredTokens(0);
+      const [owner, notOwner] = await ethers.getSigners();
+      await expect(controllerV3.connect(notOwner).setOnwardIncentives(token, ethers.constants.AddressZero)).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(controllerV3.connect(owner).setOnwardIncentives(token, ethers.constants.AddressZero)).to.be.not.rejected;
+    });
+    it("Should be able set onward incentives", async () => {
+      const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
+      await controllerV3.setup();
+      const token: string = await controllerV3.registeredTokens(0);
+      const [owner, newController] = await ethers.getSigners();
+      await controllerV3.connect(owner).setOnwardIncentives(token, newController.address);
+      const poolInfo: PoolInfo = await controllerV3.poolInfo(token);
+      expect(poolInfo.onwardIncentives).to.be.equal(newController.address);
+    });
+  });
+  describe("setClaimReceiver", () => {
+    it("Should be possible called only itself or owner", async () => {
+      const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
+      const [owner, user1, user2, claimReceiver] = await ethers.getSigners();
+      await expect(controllerV3.connect(user2).setClaimReceiver(user1.address, claimReceiver.address)).to.be.rejectedWith("");
+      await expect(controllerV3.connect(user1).setClaimReceiver(user1.address, claimReceiver.address)).to.be.not.rejected;
+      await expect(controllerV3.connect(owner).setClaimReceiver(user1.address, claimReceiver.address)).to.be.not.rejected;
+    });
+    it("Should be able set claim receiver", async () => {
+      const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
+      const [owner, user1, claimReceiver] = await ethers.getSigners();
+      await controllerV3.connect(owner).setClaimReceiver(user1.address, claimReceiver.address);
+      expect(await controllerV3.claimReceiver(user1.address)).to.be.equal(claimReceiver.address);
+    });
+  });
 
   describe("Scenarios", () => {
-    it.skip("Should be the correct executed: handle action v2 -> migration -> claim v3 (behavior identical to v2)", async () => {
+    it("Should be the correct executed: handle action v2 -> migration -> claim v3 (behavior identical to v2)", async () => {
       const { controllerV2, controllerV3, rewardMinterV2, rewardMinterV3, rewardToken, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
       const [, user1] = await ethers.getSigners();
       await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther('1000'));
@@ -418,7 +486,7 @@ describe("IncentivesControllerV3", () => {
       expect(balanceAfter.sub(balanceBefore)).to.be.equals(calcClaimableReward2.add(userBaseClaimable2));
       expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equals(balanceAfter.sub(balanceBefore));
     });
-    it.skip("Should be the correct executed: handle action v2 -> migration -> handleAction v3 -> claim v3 (behavior identical to v2)", async () => {
+    it("Should be the correct executed: handle action v2 -> migration -> handleAction v3 -> claim v3 (behavior identical to v2)", async () => {
       const { controllerV2, controllerV3, rewardMinterV2, rewardMinterV3, rewardToken, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
       const [, user1] = await ethers.getSigners();
       await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther('1000'));
@@ -462,7 +530,7 @@ describe("IncentivesControllerV3", () => {
       expect(balanceAfter.sub(balanceBefore)).to.be.equals(calcClaimableReward2.add(userBaseClaimable2));
       expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equal(balanceAfter.sub(balanceBefore));
     });
-    it.skip("Should be the correct executed: migration -> handleAction v3 -> claim v3 (behavior identical to v2)", async () => {
+    it("Should be the correct executed: migration -> handleAction v3 -> claim v3 (behavior identical to v2)", async () => {
       const { controllerV2, controllerV3, rewardMinterV2, rewardMinterV3, rewardToken, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
       const [, user1] = await ethers.getSigners();
       await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther('1000'));
@@ -504,7 +572,7 @@ describe("IncentivesControllerV3", () => {
       expect(balanceAfter.sub(balanceBefore)).to.be.equals(calcClaimableReward2.add(userBaseClaimable2));
       expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equal(balanceAfter.sub(balanceBefore));
     });
-    it.skip("Should be the correct executed: account1 handle action v2 -> migration -> account2 handle action -> account1 claim (behavior identical to v2)", async () => {
+    it("Should be the correct executed: user1 handle action v2 -> migration -> account2 handle action -> user1 claim (behavior identical to v2)", async () => {
       const { controllerV2, controllerV3, rewardMinterV2, rewardMinterV3, rewardToken, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
       const [, user1, user2] = await ethers.getSigners();
       await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther('1000'));
@@ -547,6 +615,140 @@ describe("IncentivesControllerV3", () => {
       expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equals(calcClaimableReward1.add(userBaseClaimable1));
       expect(balanceAfter.sub(balanceBefore)).to.be.equals(calcClaimableReward2.add(userBaseClaimable2));
       expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equal(balanceAfter.sub(balanceBefore));
+    });
+    it("Should be the correct executed: user1 handle action v2 -> migration -> account2 handle action -> user1 claim. Equals claimable reward (behavior identical to v2", async () => {
+      const { controllerV2, controllerV3, rewardMinterV2, rewardMinterV3, rewardToken, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
+      const [, user1, user2] = await ethers.getSigners();
+      await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther('1000'));
+      const tokenAddress: string = await controllerV2.registeredTokens(0);
+      const token = await ethers.getContractAt("IERC20", tokenAddress);
+      const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(tokenAddress);
+      await ethers.provider.send('hardhat_setBalance', [tokenSigner.address, ethers.utils.parseEther('1000').toHexString()]);
+      const totalSupply: BigNumber = await token.totalSupply();
+      const balanceInWei1: BigNumber = ethers.utils.parseEther('1000');
+      const balanceInWei2: BigNumber = ethers.utils.parseEther('2000');
+      await controllerV2.connect(tokenSigner).handleAction(user1.address, balanceInWei1, balanceInWei1.add(totalSupply));
+      await time.increase(86400 * 5);
+      await controllerV3.setup();
+      await time.increase(86400 * 5);
+      const snapshot1: SnapshotRestorer = await takeSnapshot();
+      await time.increase(86400 * 5);
+      const readyToVest1_1: BigNumber[] = await controllerV2.claimableReward(user1.address, [token.address]);
+      await controllerV2.connect(tokenSigner).handleAction(user2.address, balanceInWei2, balanceInWei2.add(totalSupply));
+      const blockTimestamp1: BigNumber = BigNumber.from(await time.increase(86400 * 5) + 1);
+      const readyToVest1_2: BigNumber[] = await controllerV2.claimableReward(user1.address, [token.address]);
+      const poolInfo1 = await controllerV2.poolInfo(tokenAddress);
+      const userInfo1 = await controllerV2.userInfo(tokenAddress, user1.address);
+      const totalAllocPoint1 = await controllerV2.totalAllocPoint();
+      const rewardsPerSecond1: BigNumber = await controllerV2.rewardsPerSecond();
+      const userBaseClaimable1: BigNumber = await controllerV2.userBaseClaimable(user1.address);
+      const calcClaimableReward1 = calcClaimableReward(poolInfo1, userInfo1, rewardsPerSecond1, totalAllocPoint1, blockTimestamp1);
+      await controllerV2.connect(user1).claim(user1.address, [tokenAddress]);
+      const withdrawable: WithdrawableBalance = await rewardMinterV2.withdrawableBalance(user1.address);
+      await snapshot1.restore();
+      await time.increase(86400 * 5);
+      const readyToVest2_1: BigNumber[] = await controllerV3.claimableReward(user1.address, [token.address]);
+      await controllerV3.connect(tokenSigner).handleAction(user2.address, balanceInWei2, balanceInWei2.add(totalSupply));
+      const blockTimestamp2: BigNumber = BigNumber.from(await time.increase(86400 * 5) + 1);
+      const readyToVest2_2: BigNumber[] = await controllerV3.claimableReward(user1.address, [token.address]);
+      const poolInfo2 = await controllerV3.poolInfo(tokenAddress);
+      const userInfo2 = await controllerV2.userInfo(tokenAddress, user1.address);
+      const totalAllocPoint2 = await controllerV3.totalAllocPoint();
+      const rewardsPerSecond2: BigNumber = await controllerV3.rewardsPerSecond();
+      const userBaseClaimable2: BigNumber = await controllerV2.userBaseClaimable(user1.address);
+      const calcClaimableReward2 = calcClaimableReward(poolInfo2, userInfo2, rewardsPerSecond2, totalAllocPoint2, blockTimestamp2);
+      const balanceBefore: BigNumber = await rewardToken.balanceOf(user1.address);
+      await controllerV3.connect(user1).claim(user1.address, [tokenAddress]);
+      const balanceAfter: BigNumber = await rewardToken.balanceOf(user1.address);
+      expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equals(calcClaimableReward1.add(userBaseClaimable1));
+      expect(balanceAfter.sub(balanceBefore)).to.be.equals(calcClaimableReward2.add(userBaseClaimable2));
+      expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equal(balanceAfter.sub(balanceBefore));
+      expect(readyToVest1_1[0]).to.be.equal(readyToVest2_1[0]);
+      expect(readyToVest1_2[0]).to.be.equal(readyToVest2_2[0]);
+    });
+    it("Should be the correct executed: user1 handle action v1 -> migration -> account2 deposit -> account 1 withdraw -> account 1 claim", async () => {
+      const { controllerV2, controllerV3, rewardMinterV2, rewardMinterV3, rewardToken, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
+      const [, user1, user2] = await ethers.getSigners();
+      await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther('1000'));
+      const tokenAddress: string = await controllerV2.registeredTokens(0);
+      const token = await ethers.getContractAt("IERC20", tokenAddress);
+      const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(tokenAddress);
+      await ethers.provider.send('hardhat_setBalance', [tokenSigner.address, ethers.utils.parseEther('1000').toHexString()]);
+      const totalSupply: BigNumber = await token.totalSupply();
+      const balanceInWei1: BigNumber = ethers.utils.parseEther('1000');
+      const balanceInWei2: BigNumber = ethers.utils.parseEther('2000');
+      await controllerV2.connect(tokenSigner).handleAction(user1.address, balanceInWei1, balanceInWei1.add(totalSupply));
+      await time.increase(86400 * 5);
+      await controllerV3.setup();
+      await time.increase(86400 * 5);
+      const snapshot1: SnapshotRestorer = await takeSnapshot();
+      await time.increase(86400 * 5);
+      await controllerV2.connect(tokenSigner).handleAction(user2.address, balanceInWei2, balanceInWei2.add(totalSupply));
+      await time.increase(86400 * 5);
+      await controllerV2.connect(tokenSigner).handleAction(user1.address, 0, totalSupply);
+      const blockTimestamp1: BigNumber = BigNumber.from(await time.increase(86400 * 5) + 1);
+      const poolInfo1 = await controllerV2.poolInfo(tokenAddress);
+      const userInfo1 = await controllerV2.userInfo(tokenAddress, user1.address);
+      const totalAllocPoint1 = await controllerV2.totalAllocPoint();
+      const rewardsPerSecond1: BigNumber = await controllerV2.rewardsPerSecond();
+      const userBaseClaimable1: BigNumber = await controllerV2.userBaseClaimable(user1.address);
+      const calcClaimableReward1 = calcClaimableReward(poolInfo1, userInfo1, rewardsPerSecond1, totalAllocPoint1, blockTimestamp1);
+      await controllerV2.connect(user1).claim(user1.address, [tokenAddress]);
+      const withdrawable: WithdrawableBalance = await rewardMinterV2.withdrawableBalance(user1.address);
+      await snapshot1.restore();
+      await time.increase(86400 * 5);
+      await controllerV3.connect(tokenSigner).handleAction(user2.address, balanceInWei2, balanceInWei2.add(totalSupply));
+      await time.increase(86400 * 5);
+      await controllerV3.connect(tokenSigner).handleAction(user1.address, 0, totalSupply);
+      const blockTimestamp2: BigNumber = BigNumber.from(await time.increase(86400 * 5) + 1);
+      const poolInfo2 = await controllerV3.poolInfo(tokenAddress);
+      const userInfo2 = await controllerV3.userInfo(tokenAddress, user1.address);
+      const totalAllocPoint2 = await controllerV3.totalAllocPoint();
+      const rewardsPerSecond2: BigNumber = await controllerV3.rewardsPerSecond();
+      const userBaseClaimable2: BigNumber = await controllerV3.userBaseClaimable(user1.address);
+      const calcClaimableReward2 = calcClaimableReward(poolInfo2, userInfo2, rewardsPerSecond2, totalAllocPoint2, blockTimestamp2);
+      const balanceBefore: BigNumber = await rewardToken.balanceOf(user1.address);
+      await controllerV3.connect(user1).claim(user1.address, [tokenAddress]);
+      const balanceAfter: BigNumber = await rewardToken.balanceOf(user1.address);
+      expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equals(calcClaimableReward1.add(userBaseClaimable1));
+      expect(balanceAfter.sub(balanceBefore)).to.be.equals(calcClaimableReward2.add(userBaseClaimable2));
+      expect(withdrawable.amount.add(withdrawable.penaltyAmount)).to.be.equal(balanceAfter.sub(balanceBefore));
+    });
+    it("deposit -> wait 10days -> claimableReward([uToken]) -> migration -> borrow (handleAction) -> wait 10 days -> claimableReward([uToken, debtToken]) -> claim -> wait 10 days -> claimableReward([uToken, debtToken]) (precision claimableReward 99.99%)", async () => {
+      const { controllerV2, controllerV3, rewardMinterV2, rewardMinterV3, rewardToken, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
+      const [, user1] = await ethers.getSigners();
+      await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther('1000'));
+      const uTokenAddress: string = await controllerV2.registeredTokens(0);
+      const debtTokenAddress: string = await controllerV2.registeredTokens(1);
+      const uToken = await ethers.getContractAt("IERC20", uTokenAddress);
+      const debtToken = await ethers.getContractAt("IERC20", debtTokenAddress);
+      const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(uTokenAddress);
+      const debtTokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(debtTokenAddress);
+      await ethers.provider.send('hardhat_setBalance', [tokenSigner.address, ethers.utils.parseEther('1000').toHexString()]);
+      await ethers.provider.send('hardhat_setBalance', [debtTokenSigner.address, ethers.utils.parseEther('1000').toHexString()]);
+      const uTotalSupply: BigNumber = await uToken.totalSupply();
+      const debtTotalSupply: BigNumber = await debtToken.totalSupply();
+      const uBalanceInWei: BigNumber = ethers.utils.parseEther('1000');
+      const debtBalanceInWei: BigNumber = ethers.utils.parseEther('1000');
+      await controllerV2.connect(tokenSigner).handleAction(user1.address, uBalanceInWei, uBalanceInWei.add(uTotalSupply));
+      await time.increase(86400 * 5);
+      await controllerV3.setup();
+      await controllerV3.connect(debtTokenSigner).handleAction(user1.address, debtBalanceInWei, debtBalanceInWei.add(debtTotalSupply));
+      const blockTimestamp: BigNumber = BigNumber.from(await time.increase(86400 * 5) + 1);
+      const uPoolInfo = await controllerV3.poolInfo(uToken.address);
+      const uUserInfo = await controllerV2.userInfo(uToken.address, user1.address);
+      const debtPoolInfo = await controllerV3.poolInfo(debtToken.address);
+      const debtUserInfo = await controllerV3.userInfo(debtToken.address, user1.address);
+      const totalAllocPoint = await controllerV3.totalAllocPoint();
+      const rewardsPerSecond: BigNumber = await controllerV3.rewardsPerSecond();
+      const uCalcClaimableReward1 = calcClaimableReward(uPoolInfo, uUserInfo, rewardsPerSecond, totalAllocPoint, blockTimestamp);
+      const debtCalcClaimableReward1 = calcClaimableReward(debtPoolInfo, debtUserInfo, rewardsPerSecond, totalAllocPoint, blockTimestamp);
+      const readyToVest: BigNumber[] = await controllerV3.connect(user1).claimableReward(user1.address, [uToken.address, debtToken.address]);
+      const readyToVestSum: BigNumber = readyToVest.reduce((a: BigNumber, b: BigNumber) => a.add(b));
+      await controllerV3.connect(user1).claim(user1.address, [uToken.address, debtToken.address]);
+      const rewardBalance: BigNumber = await rewardToken.balanceOf(user1.address);
+      expect(readyToVestSum.mul(10000).div(rewardBalance)).to.be.equal(9999) // precision 99.99%
+      expect(rewardBalance).to.be.equal(uCalcClaimableReward1.add(debtCalcClaimableReward1));
     });
   });
 });

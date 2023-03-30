@@ -1,8 +1,8 @@
 import { BigNumber } from "ethers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { IERC20 } from "../typechain-types/contracts/interfaces/IERC20";
+import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20/IERC20";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import erc20ABI from "../abi/erc20.json";
+import erc20ABI from "../abi/IERC20.json";
 
 export type TokensAddresses = {
   uwu: string;
