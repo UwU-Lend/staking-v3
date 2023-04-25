@@ -2,7 +2,7 @@
 pragma solidity 0.8.18;
 
 import {IChefIncentivesController} from './interfaces/IChefIncentivesController.sol';
-import {IBasePositionManager} from './interfaces/IBasePositionManager.sol';
+import {IUniswapV3PositionManager} from './interfaces/IUniswapV3PositionManager.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
@@ -11,7 +11,7 @@ import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet
 import {IERC721} from '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
 
-contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
+contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   using SafeMath for uint;
   using SafeERC20 for IERC20;
   using EnumerableSet for EnumerableSet.AddressSet;
@@ -64,6 +64,14 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
     uint256 unlockTime;
   }
 
+  struct PositionConfig {
+    address token0;
+    address token1;
+    uint24 fee;
+    int24 tickLower;
+    int24 tickUpper;
+  }
+
   uint256 public constant rewardsDuration = 86400 * 7; // reward interval 7 days;
   uint256 public constant rewardLookback = 86400;
   uint256 public constant lockDuration = rewardsDuration * 8; // 56 days
@@ -87,7 +95,6 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
   IERC721 public immutable nft;
   IERC20 public immutable rewardToken;
   address public immutable rewardTokenVault;
-  uint80 public immutable poolId;
   address public teamRewardVault;
   uint256 public teamRewardFee = 2000; // 1% = 100
   address[] public rewardTokens;
@@ -95,7 +102,6 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
 
   uint256 public liquiditySupply;
   bool public publicExitAreSet;
-  int24[2] public tickRange;
 
   // Private mappings for balance data
   mapping(address => Balances) private balances;
@@ -103,10 +109,12 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
   mapping(address => LockedBalance[]) private userEarnings; // vesting UwU tokens
   mapping(address => address) public exitDelegatee;
 
-  constructor(IERC721 _nft, uint80 _poolId, int24[2] memory _tickRange, IERC20 _rewardToken, address _rewardTokenVault) {
+  PositionConfig public posConfig;
+
+
+  constructor(IERC721 _nft, PositionConfig memory _posConfig, IERC20 _rewardToken, address _rewardTokenVault) {
     nft = _nft;
-    poolId = _poolId;
-    tickRange = _tickRange;
+    posConfig = _posConfig;
     rewardToken = _rewardToken;
     rewardTokenVault = _rewardTokenVault;
     rewardTokens.push(address(_rewardToken));
@@ -141,8 +149,8 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
     incentivesController = _controller;
   }
 
-  function setTickRange(int24[2] calldata _tickRange) external onlyOwner {
-    tickRange = _tickRange;
+  function setPositionConfig(PositionConfig memory _posConfig) external onlyOwner {
+    posConfig = _posConfig;
   }
 
    // Add a new reward token to be distributed to stakers
@@ -282,17 +290,19 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
     _updateReward(sender);
     for (uint256 i = 0; i < nftIds.length; i++) {
       uint256 nftId = nftIds[i];
-      IBasePositionManager.Position memory pos = _getPositionFromNFT(address(nft), nftId);
-      require(tickRange[0] <= pos.tickLower, 'Exceeded lower tick range');
-      require(tickRange[1] >= pos.tickUpper, 'Exceeded upper tick range');
-      require(pos.poolId == poolId, 'Invalid poolId');
-      require(pos.liquidity > 0, 'Invalid liquidity');
+      ( , , address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, , , , ) = IUniswapV3PositionManager(address(nft)).positions(nftId);
+      require(posConfig.tickLower <= tickLower, 'Exceeded lower tick range');
+      require(posConfig.tickUpper >= tickUpper, 'Exceeded upper tick range');
+      require(posConfig.fee == fee, 'Invalid fee');
+      require(posConfig.token0 == token0, 'Invalid token0');
+      require(posConfig.token1 == token1, 'Invalid token1');
+      require(liquidity > 0, 'Invalid liquidity');
       require(lockedNFTs[sender].add(nftId), 'Fail to add lockedNFTs');
       nfts[nftId].owner = sender;
-      nfts[nftId].liquidity = pos.liquidity;
+      nfts[nftId].liquidity = liquidity;
       nfts[nftId].unlockTime = block.timestamp.add(lockDuration);
-      liquidities[sender] = liquidities[sender].add(pos.liquidity);
-      liquiditySupply = liquiditySupply.add(pos.liquidity);
+      liquidities[sender] = liquidities[sender].add(liquidity);
+      liquiditySupply = liquiditySupply.add(liquidity);
       nft.transferFrom(sender, address(this), nftId);
       emit Locked(sender, nftId);
     }
@@ -499,15 +509,6 @@ contract MultiFeeDistributionV3 is ERC721Holder, Ownable {
     require(!publicExitAreSet, 'public exit are set');
     publicExitAreSet = true;
     emit PublicExit();
-  }
-
-  function getLiquidity(address nftContract, uint256 nftId) public view returns (uint128 liquidity) {
-    IBasePositionManager.Position memory pos = _getPositionFromNFT(nftContract, nftId);
-    return pos.liquidity;
-  }
-
-  function _getPositionFromNFT(address nftContract, uint256 nftId) internal view returns (IBasePositionManager.Position memory pos) {
-    (pos, ) = IBasePositionManager(nftContract).positions(nftId);
   }
 
 }
