@@ -100,6 +100,186 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       expect(accountLiquidity2.total).to.be.equal(100);
       expect(liquiditySupply2).to.be.equal(100);
     });
+    it("Should be reverted if fee different", async () => {
+      const { treasury, nft } = await loadFixture(fixture);
+      const [recipient1, recipient2] = await ethers.getSigners();
+      const params1: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient1.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      const params2: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient2.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: '3000',
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      await nft.mint(params1);
+      await nft.mint(params2);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      await nft.connect(recipient1).approve(treasury.address, nftId1);
+      await nft.connect(recipient2).approve(treasury.address, nftId2);
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
+      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Invalid fee');
+    });
+    it("Should be reverted if tickLower lower", async () => {
+      const { treasury, nft } = await loadFixture(fixture);
+      const [recipient1, recipient2] = await ethers.getSigners();
+      const params1: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient1.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      const params2: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient2.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: Number(Number(POSITION_CONFIG.tickLower) - 100).toString(),
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      await nft.mint(params1);
+      await nft.mint(params2);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      await nft.connect(recipient1).approve(treasury.address, nftId1);
+      await nft.connect(recipient2).approve(treasury.address, nftId2);
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
+      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Exceeded lower tick range');
+    });
+    it("Should be reverted if tickUpper upper", async () => {
+      const { treasury, nft } = await loadFixture(fixture);
+      const [recipient1, recipient2] = await ethers.getSigners();
+      const params1: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient1.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      const params2: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient2.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: Number(Number(POSITION_CONFIG.tickUpper) + 100).toString(),
+        liquidity: 100,
+      };
+      await nft.mint(params1);
+      await nft.mint(params2);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      await nft.connect(recipient1).approve(treasury.address, nftId1);
+      await nft.connect(recipient2).approve(treasury.address, nftId2);
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
+      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Exceeded upper tick range');
+    });
+    it("Should be reverted if token0 different", async () => {
+      const { treasury, nft } = await loadFixture(fixture);
+      const [recipient1, recipient2] = await ethers.getSigners();
+      const params1: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient1.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      const params2: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient2.address,
+        token0: ethers.constants.AddressZero,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      await nft.mint(params1);
+      await nft.mint(params2);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      await nft.connect(recipient1).approve(treasury.address, nftId1);
+      await nft.connect(recipient2).approve(treasury.address, nftId2);
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
+      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Invalid token0');
+    });
+    it("Should be reverted if token1 different", async () => {
+      const { treasury, nft } = await loadFixture(fixture);
+      const [recipient1, recipient2] = await ethers.getSigners();
+      const params1: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient1.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      const params2: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient2.address,
+        token0: POSITION_CONFIG.token0,
+        token1: ethers.constants.AddressZero,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      await nft.mint(params1);
+      await nft.mint(params2);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      await nft.connect(recipient1).approve(treasury.address, nftId1);
+      await nft.connect(recipient2).approve(treasury.address, nftId2);
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
+      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Invalid token1');
+    });
+    it("Should be not reverted if ticks in range", async () => {
+      const { treasury, nft } = await loadFixture(fixture);
+      const [recipient1, recipient2] = await ethers.getSigners();
+      const params1: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient1.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      const params2: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient2.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: Number(Number(POSITION_CONFIG.tickLower) + 100).toString(),
+        tickUpper: Number(Number(POSITION_CONFIG.tickUpper) - 100).toString(),
+        liquidity: 100,
+      };
+      await nft.mint(params1);
+      await nft.mint(params2);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      await nft.connect(recipient1).approve(treasury.address, nftId1);
+      await nft.connect(recipient2).approve(treasury.address, nftId2);
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
+      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.not.rejected;
+    });
   });
   describe("WithdrawExpiredLocks", () => {
     it("Should be able withdraw expired locks", async () => {
