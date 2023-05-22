@@ -33,15 +33,22 @@ contract IncentivesControllerV3 is Ownable {
     uint128 rewardsPerSecond;
   }
 
+  /// @notice The address of the pool configurator.
   address public poolConfigurator;
+  /// @notice  The address of the reward minter.
   IMultiFeeDistribution public rewardMinter;
+  /// @notice The address of the incentives controller.
   IChefIncentivesController public immutable incentivesController;
+  /// @notice The amount of tokens to be minted per second.
   uint public rewardsPerSecond;
+  /// @notice The maximum amount of tokens that can be minted.
   uint public maxMintableTokens;
+  /// @notice The amount of tokens that have been minted.
   uint public mintedTokens;
 
   // Info of each pool.
   address[] public registeredTokens;
+  /// @notice Info of each pool.
   mapping(address => PoolInfo) public poolInfo;
 
   // Data about the future reward rates. emissionSchedule stored in reverse chronological order,
@@ -53,7 +60,7 @@ contract IncentivesControllerV3 is Ownable {
   // user => base claimable balance
   mapping(address => uint) public userBaseClaimable;
   // Total allocation poitns. Must be the sum of all allocation points in all pools.
-  uint public totalAllocPoint = 0;
+  uint public totalAllocPoint;
   // The block number when reward mining starts.
   uint public startTime;
 
@@ -69,6 +76,16 @@ contract IncentivesControllerV3 is Ownable {
     uint totalSupply
   );
 
+  event PoolAdded(
+    address indexed token,
+    uint allocPoint
+  );
+
+  event AllocPointUpdated(
+    address indexed token,
+    uint allocPoint
+  );
+
   bool private setuped;
   mapping(address => mapping(address => bool)) private userInfoInitiated;
   mapping(address => bool) private userBaseClaimableInitiated;
@@ -78,6 +95,9 @@ contract IncentivesControllerV3 is Ownable {
     IMultiFeeDistribution _rewardMinter,
     IChefIncentivesController _incentivesController
   ) {
+    require(_poolConfigurator != address(0), "pool configurator not set");
+    require(address(_rewardMinter) != address(0), "reward minter not set");
+    require(address(_incentivesController) != address(0), "incentives controller not set");
     poolConfigurator = _poolConfigurator;
     rewardMinter = _rewardMinter;
     incentivesController = _incentivesController;
@@ -85,8 +105,9 @@ contract IncentivesControllerV3 is Ownable {
 
   // Add a new lp to the pool. Can only be called by the poolConfigurator.
   function addPool(address _token, uint _allocPoint) external {
-    require(msg.sender == poolConfigurator);
-    require(poolInfo[_token].lastRewardTime == 0);
+    require(_token != address(0), "token cannot be zero address");
+    require(msg.sender == poolConfigurator, "only pool configurator can add pools");
+    require(poolInfo[_token].lastRewardTime == 0, "pool already registered");
     _updateEmissions();
     totalAllocPoint = totalAllocPoint.add(_allocPoint);
     registeredTokens.push(_token);
@@ -97,23 +118,26 @@ contract IncentivesControllerV3 is Ownable {
       accRewardPerShare: 0,
       onwardIncentives: IOnwardIncentivesController(address(0))
     });
+    emit PoolAdded(_token, _allocPoint);
   }
 
   // Update the given pool's allocation point. Can only be called by the owner.
   function batchUpdateAllocPoint(
     address[] calldata _tokens,
     uint[] calldata _allocPoints
-  ) public onlyOwner {
-    require(_tokens.length == _allocPoints.length);
+  ) external onlyOwner {
+    require(_tokens.length == _allocPoints.length, "arrays not same length");
     _massUpdatePools();
     uint _totalAllocPoint = totalAllocPoint;
     for (uint i = 0; i < _tokens.length; i++) {
       PoolInfo storage pool = poolInfo[_tokens[i]];
-      require(pool.lastRewardTime > 0);
+      require(pool.lastRewardTime != 0, "pool not registered");
       _totalAllocPoint = _totalAllocPoint.sub(pool.allocPoint).add(_allocPoints[i]);
       pool.allocPoint = _allocPoints[i];
+      emit AllocPointUpdated(_tokens[i], _allocPoints[i]);
     }
     totalAllocPoint = _totalAllocPoint;
+
   }
 
   function setOnwardIncentives(
@@ -123,12 +147,13 @@ contract IncentivesControllerV3 is Ownable {
     external
     onlyOwner
   {
-    require(poolInfo[_token].lastRewardTime != 0);
+    require(poolInfo[_token].lastRewardTime != 0, "pool not registered");
     poolInfo[_token].onwardIncentives = _incentives;
   }
 
   function setClaimReceiver(address _user, address _receiver) external {
-    require(msg.sender == _user || msg.sender == owner());
+    require(msg.sender == _user, "only user can set claim receiver");
+    require(_receiver != address(0), "receiver cannot be zero address");
     claimReceiver[_user] = _receiver;
   }
 
@@ -169,7 +194,7 @@ contract IncentivesControllerV3 is Ownable {
 
   function _updateEmissions() internal {
     uint length = emissionSchedule.length;
-    if (startTime > 0 && length > 0) {
+    if (startTime != 0 && length != 0) {
       EmissionPoint memory e = emissionSchedule[length-1];
       if (block.timestamp.sub(startTime) > e.startTimeOffset) {
         _massUpdatePools();
@@ -209,7 +234,7 @@ contract IncentivesControllerV3 is Ownable {
     if (minted.add(_amount) > maxMintableTokens) {
       _amount = maxMintableTokens.sub(minted);
     }
-    if (_amount > 0) {
+    if (_amount != 0) {
       mintedTokens = minted.add(_amount);
       address receiver = claimReceiver[_user];
       if (receiver == address(0)) receiver = _user;
@@ -221,15 +246,15 @@ contract IncentivesControllerV3 is Ownable {
     initiateUserInfo(_user, msg.sender);
     initiateUserBaseClaimable(_user);
     PoolInfo storage pool = poolInfo[msg.sender];
-    require(pool.lastRewardTime > 0);
+    require(pool.lastRewardTime != 0);
     _updateEmissions();
     _updatePool(pool, totalAllocPoint);
     UserInfo storage user = userInfo[msg.sender][_user];
     uint256 amount = user.amount;
     uint256 accRewardPerShare = pool.accRewardPerShare;
-    if (amount > 0) {
+    if (amount != 0) {
       uint256 pending = amount.mul(accRewardPerShare).div(1e12).sub(user.rewardDebt);
-      if (pending > 0) {
+      if (pending != 0) {
         userBaseClaimable[_user] = userBaseClaimable[_user].add(pending);
       }
     }
@@ -272,11 +297,10 @@ contract IncentivesControllerV3 is Ownable {
     _updateEmissions();
     uint256 pending = userBaseClaimable[_user];
     userBaseClaimable[_user] = 0;
-    uint256 _totalAllocPoint = totalAllocPoint;
     for (uint i = 0; i < _tokens.length; i++) {
       PoolInfo storage pool = poolInfo[_tokens[i]];
-      require(pool.lastRewardTime > 0);
-      _updatePool(pool, _totalAllocPoint);
+      require(pool.lastRewardTime != 0);
+      _updatePool(pool, totalAllocPoint);
       UserInfo storage user = userInfo[_tokens[i]][_user];
       uint256 rewardDebt = user.amount.mul(pool.accRewardPerShare).div(1e12);
       pending = pending.add(rewardDebt.sub(user.rewardDebt));

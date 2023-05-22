@@ -907,12 +907,15 @@ describe("MultiFeeDistributionUNIV3POS", () => {
     });
     it("Should be able set team reward fee", async () => {
       const { treasury } = await loadFixture(fixture);
-      const [owner] = await ethers.getSigners();
       const teamRewardFee0: BigNumber = await treasury.teamRewardFee();
       await treasury.setTeamRewardFee(1);
       const teamRewardFee1: BigNumber = await treasury.teamRewardFee();
       expect(teamRewardFee1).to.not.be.equal(teamRewardFee0);
       expect(teamRewardFee1).to.be.equal(1);
+    });
+    it("Should be rejected when set fee greater 50%", async () => {
+      const { treasury } = await loadFixture(fixture);
+      await expect(treasury.setTeamRewardFee(6000)).to.be.rejected; // 60%
     });
   });
   describe("getMinters", () => {
@@ -961,11 +964,11 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       const { treasury } = await loadFixture(fixture);
       const [owner, notOwner] = await ethers.getSigners();
       const posConfig: MultiFeeDistributionUNIV3POS.PositionConfigStruct = {
-        token0: ethers.constants.AddressZero,
-        token1: ethers.constants.AddressZero,
+        token0: '0x0000000000000000000000000000000000000001',
+        token1: '0x0000000000000000000000000000000000000002',
         fee: 100,
-        tickLower: 0,
-        tickUpper: 0,
+        tickLower: 1,
+        tickUpper: 2,
       }
       await expect(treasury.connect(notOwner).setPositionConfig(posConfig)).to.be.rejected;
       await expect(treasury.connect(owner).setPositionConfig(posConfig)).to.be.not.rejected;
@@ -1004,6 +1007,30 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       expect(posConfig2.fee).to.be.equal(200);
       expect(posConfig2.tickLower).to.be.equal(1);
       expect(posConfig2.tickUpper).to.be.equal(2);
+    });
+    it("Should be rejected with incorrect imputs", async () => {
+      const { treasury } = await loadFixture(fixture);
+      await expect(treasury.setPositionConfig({
+        token0: ethers.constants.AddressZero,
+        token1: '0x0000000000000000000000000000000000000002',
+        fee: 200,
+        tickLower: 1,
+        tickUpper: 2,
+      })).to.be.rejected;
+      await expect(treasury.setPositionConfig({
+        token0: '0x0000000000000000000000000000000000000001',
+        token1: ethers.constants.AddressZero,
+        fee: 200,
+        tickLower: 1,
+        tickUpper: 2,
+      })).to.be.rejected;
+      await expect(treasury.setPositionConfig({
+        token0: '0x0000000000000000000000000000000000000001',
+        token1: '0x0000000000000000000000000000000000000002',
+        fee: 200,
+        tickLower: 2,
+        tickUpper: 2,
+      })).to.be.rejected;
     });
   });
 });

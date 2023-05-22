@@ -429,17 +429,16 @@ describe("IncentivesControllerV3", () => {
     });
   });
   describe("setClaimReceiver", () => {
-    it("Should be possible called only itself or owner", async () => {
+    it("Should be possible called only itself", async () => {
       const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
       const [owner, user1, user2, claimReceiver] = await ethers.getSigners();
       await expect(controllerV3.connect(user2).setClaimReceiver(user1.address, claimReceiver.address)).to.be.rejectedWith("");
       await expect(controllerV3.connect(user1).setClaimReceiver(user1.address, claimReceiver.address)).to.be.not.rejected;
-      await expect(controllerV3.connect(owner).setClaimReceiver(user1.address, claimReceiver.address)).to.be.not.rejected;
     });
     it("Should be able set claim receiver", async () => {
       const { controllerV3 } = await loadFixture(incentivesControllerV3Fixture);
-      const [owner, user1, claimReceiver] = await ethers.getSigners();
-      await controllerV3.connect(owner).setClaimReceiver(user1.address, claimReceiver.address);
+      const [, user1, claimReceiver] = await ethers.getSigners();
+      await controllerV3.connect(user1).setClaimReceiver(user1.address, claimReceiver.address);
       expect(await controllerV3.claimReceiver(user1.address)).to.be.equal(claimReceiver.address);
     });
   });
