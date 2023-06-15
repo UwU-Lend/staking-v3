@@ -5,6 +5,7 @@
     "@types/lowdb": "^1.0.11",
     "dotenv": "^16.0.3",
     "hardhat": "^2.13.0",
-    "lowdb": "^1.0.0"
+    "lowdb": "^1.0.0",
+    "solidity-coverage": "^0.8.2"
   }
 }

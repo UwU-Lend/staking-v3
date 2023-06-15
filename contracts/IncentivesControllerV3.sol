@@ -242,6 +242,13 @@ contract IncentivesControllerV3 is Ownable {
     }
   }
 
+  /**
+   * @notice Handle an action that has been triggered on a pool. (e.g. deposit/withdraw/borrow/repay)
+   * @dev msg.sender is a token contract.
+   * @param _user address of the user that triggered the action.
+   * @param _balance balance of the user on the token contract.
+   * @param _totalSupply total supply of the token contract.
+   */
   function handleAction(address _user, uint _balance, uint _totalSupply) external {
     initiateUserInfo(_user, msg.sender);
     initiateUserBaseClaimable(_user);

@@ -351,6 +351,28 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     }
   }
 
+  /**
+   * @notice Withdraw expect NFTs with expired locks from contract
+   * @param nftIds List of NFT ids to lock
+   */
+  function withdrawExpiredLocks(uint256[] calldata nftIds) external {
+    address sender = msg.sender;
+    _updateReward(sender);
+    for (uint256 i = 0; i < nftIds.length; i++) {
+      uint256 nftId = nftIds[i];
+      require(lockedNFTs[sender].contains(nftId), 'Not locked');
+      if (nfts[nftId].unlockTime <= block.timestamp || publicExitAreSet) {
+        uint256 liquidity = nfts[nftId].liquidity;
+        liquiditySupply = liquiditySupply.sub(liquidity);
+        liquidities[sender] = liquidities[sender].sub(liquidity);
+        require(lockedNFTs[sender].remove(nftId), 'Fail to remove lockedNFTs');
+        delete nfts[nftId];
+        nft.safeTransferFrom(address(this), sender, nftId);
+        emit WithdrawnExpiredLocks(sender, nftId);
+      }
+    }
+  }
+
   function mint(address user, uint256 amount) external {
     require(user != address(0), 'zero address');
     require(minters.contains(msg.sender), '!minter');

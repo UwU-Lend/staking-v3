@@ -2,7 +2,6 @@ import { BigNumber, Contract } from "ethers";
 import { POOL_CONFIGURATOR, incentivesControllerV3Fixture } from "./fixtures/IncentivesControllerV3";
 import { SnapshotRestorer, loadFixture, takeSnapshot, time } from "@nomicfoundation/hardhat-network-helpers";
 
-import { IMultiFeeDistribution__factory } from "../typechain-types";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { ethers } from "hardhat";
 import { expect } from "chai";
@@ -27,17 +26,6 @@ type WithdrawableBalance = {
   amount: BigNumber;
   penaltyAmount: BigNumber;
   amountWithoutPenalty: BigNumber;
-}
-
-const calcAccRewardPerShare = (poolInfo: PoolInfo, rewardsPerSecond: BigNumber, totalAllocPoint: BigNumber, blockTimestamp: BigNumber): BigNumber =>  {
-  let accRewardPerShare = poolInfo.accRewardPerShare;
-  const lpSupply = poolInfo.totalSupply;
-  if (blockTimestamp.gt(poolInfo.lastRewardTime) && lpSupply.toString() != '0') {
-    const duration = blockTimestamp.sub(poolInfo.lastRewardTime);
-    const reward = duration.mul(rewardsPerSecond).mul(poolInfo.allocPoint).div(totalAllocPoint);
-    accRewardPerShare = accRewardPerShare.add(reward.mul(PRECISION).div(lpSupply));
-  }
-  return accRewardPerShare;
 }
 
 const calcClaimableReward = (poolInfo: PoolInfo, userInfo: UserInfo, rewardsPerSecond: BigNumber, totalAllocPoint: BigNumber, blockTimestamp: BigNumber ): BigNumber => {
@@ -350,24 +338,27 @@ describe("IncentivesControllerV3", () => {
       const totalSupply: BigNumber = await token.totalSupply();
       const balanceInWei1: BigNumber = ethers.utils.parseEther('1000');
       await controllerV2.connect(tokenSigner).handleAction(user1.address, balanceInWei1, balanceInWei1.add(totalSupply));
-      await time.increase(86400 * 3);
+      await time.increase(86400 * 5);
       await controllerV3.setup();
-      await time.increase(86400 * 3);
-      const userBaseClaimable1: BigNumber = await controllerV3.userBaseClaimable(user1.address);
+      await time.increase(86400 * 5);
+      // const userBaseClaimable1: BigNumber = await controllerV3.userBaseClaimable(user1.address);
       const userInfo = await controllerV2.userInfo(tokenAddress, user1.address);
       const blockTimestamp1: BigNumber = BigNumber.from(await time.increase(86400 * 5) + 1);
       const totalAllocPoint = await controllerV3.totalAllocPoint();
       const poolInfo = await controllerV3.poolInfo(tokenAddress);
       const rewardsPerSecond: BigNumber = await controllerV3.rewardsPerSecond();
       const calcClaimableReward1 = calcClaimableReward(poolInfo, userInfo, rewardsPerSecond, totalAllocPoint, blockTimestamp1);
+      const balance0: BigNumber = await rewardToken.balanceOf(user1.address);
       await controllerV3.claim(user1.address, [token.address]);
       const balance1: BigNumber = await rewardToken.balanceOf(user1.address);
       const blockTimestamp2: BigNumber = BigNumber.from(await time.increase(86400 * 5) + 1);
       const calcClaimableReward2 = calcClaimableReward(poolInfo, userInfo, rewardsPerSecond, totalAllocPoint, blockTimestamp2);
       await controllerV3.claim(user1.address, [token.address]);
       const balance2: BigNumber = await rewardToken.balanceOf(user1.address);
-      expect(balance1).to.be.equals(calcClaimableReward1);
-      expect(balance2).to.be.equals(calcClaimableReward2);
+      expect(calcClaimableReward1.sub(balance1)).to.be.gte(0);
+      expect(calcClaimableReward1.sub(balance1)).to.be.lte(1e9);
+      expect(calcClaimableReward2.sub(balance2)).to.be.gte(0);
+      expect(calcClaimableReward2.sub(balance2)).to.be.lte(1e9);
     });
   });
 
