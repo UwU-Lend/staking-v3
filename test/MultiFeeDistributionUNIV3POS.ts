@@ -1,18 +1,30 @@
-import { BigNumber, ContractReceipt, ContractTransaction } from "ethers";
-import { MultiFeeDistributionUNIV3POS, MultiFeeDistributionV3 } from "../typechain-types";
-import fixture, { POSITION_CONFIG } from "./fixtures/MultiFeeDistributionUNIV3POS";
+import {
+  BigNumber,
+  Contract,
+  ContractReceipt,
+  ContractTransaction,
+} from "ethers";
+import {
+  MultiFeeDistributionUNIV3POS,
+  MultiFeeDistributionUNIV3POS__factory,
+  MultiFeeDistributionV3,
+} from "../typechain-types";
+import fixture, {
+  POSITION_CONFIG,
+} from "./fixtures/MultiFeeDistributionUNIV3POS";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import {UniswapNFTMock} from "../typechain-types/contracts/mocks/UniswapNFTMock";
+import { UniswapNFTMock } from "../typechain-types/contracts/mocks/UniswapNFTMock";
 import { ethers } from "hardhat";
 import { expect } from "chai";
+import { waitTx } from "../helpers/contracts-helpers";
 
-type WithdrawableBalanceOutput = {
+type WithdrawableBalanceOutput = [BigNumber, BigNumber, BigNumber] & {
   amount: BigNumber;
   penaltyAmount: BigNumber;
   amountWithoutPenalty: BigNumber;
-}
+};
 
 type RewardDataOutput = {
   periodFinish: BigNumber;
@@ -20,7 +32,7 @@ type RewardDataOutput = {
   lastUpdateTime: BigNumber;
   rewardPerTokenStored: BigNumber;
   balance: BigNumber;
-}
+};
 
 type PositionConfig = [string, string, number, number, number] & {
   token0: string;
@@ -28,13 +40,13 @@ type PositionConfig = [string, string, number, number, number] & {
   fee: number;
   tickLower: number;
   tickUpper: number;
-}
+};
 
 type AccountLiquidityOutput = [BigNumber, BigNumber, BigNumber] & {
   total: BigNumber;
   locked: BigNumber;
   unlockable: BigNumber;
-}
+};
 
 describe("MultiFeeDistributionUNIV3POS", () => {
   describe("Deployment", () => {
@@ -47,12 +59,118 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       expect(treasury.address).to.be.properAddress;
       expect(nftAddress).to.be.equal(nft.address);
       expect(rewardToken).to.be.equal(tokens.contracts.uwu.address);
-      expect(rewardTokenVault).to.be.equal('0x5776F9bf6568f252cE5Fa85F8fEe3c0d8dE914D8');
+      expect(rewardTokenVault).to.be.equal(
+        "0x5776F9bf6568f252cE5Fa85F8fEe3c0d8dE914D8"
+      );
       expect(posConfig.token0).to.be.equal(POSITION_CONFIG.token0);
       expect(posConfig.token1).to.be.equal(POSITION_CONFIG.token1);
       expect(posConfig.fee.toString()).to.be.equal(POSITION_CONFIG.fee);
-      expect(posConfig.tickLower.toString()).to.be.equal(POSITION_CONFIG.tickLower);
-      expect(posConfig.tickUpper.toString()).to.be.equal(POSITION_CONFIG.tickUpper);
+      expect(posConfig.tickLower.toString()).to.be.equal(
+        POSITION_CONFIG.tickLower
+      );
+      expect(posConfig.tickUpper.toString()).to.be.equal(
+        POSITION_CONFIG.tickUpper
+      );
+    });
+    it("Should be reverted if nft address is zero", async () => {
+      const deployTx: Promise<Contract> = ethers.deployContract(
+        "MultiFeeDistributionUNIV3POS",
+        [
+          ethers.constants.AddressZero,
+          POSITION_CONFIG,
+          ethers.constants.AddressZero,
+          ethers.constants.AddressZero,
+        ]
+      );
+      await expect(deployTx).to.be.revertedWith("nft zero address");
+    });
+    it("Should be reverted if token0 address is zero", async () => {
+      const config = {
+        ...POSITION_CONFIG,
+        token0: ethers.constants.AddressZero,
+      };
+      const deployTx: Promise<Contract> = ethers.deployContract(
+        "MultiFeeDistributionUNIV3POS",
+        [
+          "0x0000000000000000000000000000000000000001",
+          config,
+          ethers.constants.AddressZero,
+          ethers.constants.AddressZero,
+        ]
+      );
+      await expect(deployTx).to.be.revertedWith("token0 zero address");
+    });
+    it("Should be reverted if token1 address is zero", async () => {
+      const config = {
+        ...POSITION_CONFIG,
+        token1: ethers.constants.AddressZero,
+      };
+      const deployTx: Promise<Contract> = ethers.deployContract(
+        "MultiFeeDistributionUNIV3POS",
+        [
+          "0x0000000000000000000000000000000000000001",
+          config,
+          ethers.constants.AddressZero,
+          ethers.constants.AddressZero,
+        ]
+      );
+      await expect(deployTx).to.be.revertedWith("token1 zero address");
+    });
+    it("Should be reverted if token0 equal token1", async () => {
+      const config = {
+        ...POSITION_CONFIG,
+        token0: "0x0000000000000000000000000000000000000001",
+        token1: "0x0000000000000000000000000000000000000001",
+      };
+      const deployTx: Promise<Contract> = ethers.deployContract(
+        "MultiFeeDistributionUNIV3POS",
+        [
+          "0x0000000000000000000000000000000000000001",
+          config,
+          ethers.constants.AddressZero,
+          ethers.constants.AddressZero,
+        ]
+      );
+      await expect(deployTx).to.be.revertedWith("same tokens");
+    });
+    it("Should be reverted if reward token address is zero", async () => {
+      const deployTx: Promise<Contract> = ethers.deployContract(
+        "MultiFeeDistributionUNIV3POS",
+        [
+          "0x0000000000000000000000000000000000000001",
+          POSITION_CONFIG,
+          ethers.constants.AddressZero,
+          ethers.constants.AddressZero,
+        ]
+      );
+      await expect(deployTx).to.be.revertedWith("rewardToken zero address");
+    });
+    it("Should be reverted if reward token vault address is zero", async () => {
+      const deployTx: Promise<Contract> = ethers.deployContract(
+        "MultiFeeDistributionUNIV3POS",
+        [
+          "0x0000000000000000000000000000000000000001",
+          POSITION_CONFIG,
+          "0x0000000000000000000000000000000000000001",
+          ethers.constants.AddressZero,
+        ]
+      );
+      await expect(deployTx).to.be.revertedWith(
+        "rewardTokenVault zero address"
+      );
+    });
+    it("Should be reverted if lower tick greater or equals upper tick", async () => {
+      const config = { ...POSITION_CONFIG, tickLower: 100, tickUpper: 100 };
+      const deployTx: Promise<Contract> = ethers.deployContract(
+        "MultiFeeDistributionUNIV3POS",
+        [
+          "0x0000000000000000000000000000000000000001",
+          config,
+          "0x0000000000000000000000000000000000000001",
+          "0x0000000000000000000000000000000000000001",
+        ]
+      );
+      await expect(deployTx).to.be.revertedWith("invalid tick range");
     });
   });
   describe("Lock", () => {
@@ -69,7 +187,10 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await expect(treasury.connect(recipient).lock([1])).to.be.not.rejected;
       const nftOwner: string = await nft.ownerOf(nftId);
@@ -88,12 +209,17 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
-      const accountLiquidity1: AccountLiquidityOutput = await treasury.accountLiquidity(recipient.address);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
+      const accountLiquidity1: AccountLiquidityOutput =
+        await treasury.accountLiquidity(recipient.address);
       const liquiditySupply1: BigNumber = await treasury.liquiditySupply();
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const accountLiquidity2: AccountLiquidityOutput = await treasury.accountLiquidity(recipient.address);
+      const accountLiquidity2: AccountLiquidityOutput =
+        await treasury.accountLiquidity(recipient.address);
       const liquiditySupply2: BigNumber = await treasury.liquiditySupply();
       expect(accountLiquidity1.total).to.be.equal(0);
       expect(liquiditySupply1).to.be.equal(0);
@@ -116,19 +242,28 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         recipient: recipient2.address,
         token0: POSITION_CONFIG.token0,
         token1: POSITION_CONFIG.token1,
-        fee: '3000',
+        fee: "3000",
         tickLower: POSITION_CONFIG.tickLower,
         tickUpper: POSITION_CONFIG.tickUpper,
         liquidity: 100,
       };
       await nft.mint(params1);
       await nft.mint(params2);
-      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
-      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient1.address,
+        0
+      );
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient2.address,
+        0
+      );
       await nft.connect(recipient1).approve(treasury.address, nftId1);
       await nft.connect(recipient2).approve(treasury.address, nftId2);
-      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
-      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Invalid fee');
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not
+        .rejected;
+      await expect(
+        treasury.connect(recipient2).lock([nftId2])
+      ).to.be.rejectedWith("Invalid fee");
     });
     it("Should be reverted if tickLower lower", async () => {
       const { treasury, nft } = await loadFixture(fixture);
@@ -153,12 +288,21 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       };
       await nft.mint(params1);
       await nft.mint(params2);
-      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
-      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient1.address,
+        0
+      );
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient2.address,
+        0
+      );
       await nft.connect(recipient1).approve(treasury.address, nftId1);
       await nft.connect(recipient2).approve(treasury.address, nftId2);
-      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
-      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Exceeded lower tick range');
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not
+        .rejected;
+      await expect(
+        treasury.connect(recipient2).lock([nftId2])
+      ).to.be.rejectedWith("Exceeded lower tick range");
     });
     it("Should be reverted if tickUpper upper", async () => {
       const { treasury, nft } = await loadFixture(fixture);
@@ -183,12 +327,21 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       };
       await nft.mint(params1);
       await nft.mint(params2);
-      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
-      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient1.address,
+        0
+      );
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient2.address,
+        0
+      );
       await nft.connect(recipient1).approve(treasury.address, nftId1);
       await nft.connect(recipient2).approve(treasury.address, nftId2);
-      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
-      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Exceeded upper tick range');
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not
+        .rejected;
+      await expect(
+        treasury.connect(recipient2).lock([nftId2])
+      ).to.be.rejectedWith("Exceeded upper tick range");
     });
     it("Should be reverted if token0 different", async () => {
       const { treasury, nft } = await loadFixture(fixture);
@@ -213,12 +366,21 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       };
       await nft.mint(params1);
       await nft.mint(params2);
-      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
-      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient1.address,
+        0
+      );
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient2.address,
+        0
+      );
       await nft.connect(recipient1).approve(treasury.address, nftId1);
       await nft.connect(recipient2).approve(treasury.address, nftId2);
-      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
-      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Invalid token0');
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not
+        .rejected;
+      await expect(
+        treasury.connect(recipient2).lock([nftId2])
+      ).to.be.rejectedWith("Invalid token0");
     });
     it("Should be reverted if token1 different", async () => {
       const { treasury, nft } = await loadFixture(fixture);
@@ -243,12 +405,21 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       };
       await nft.mint(params1);
       await nft.mint(params2);
-      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
-      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient1.address,
+        0
+      );
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient2.address,
+        0
+      );
       await nft.connect(recipient1).approve(treasury.address, nftId1);
       await nft.connect(recipient2).approve(treasury.address, nftId2);
-      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
-      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith('Invalid token1');
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not
+        .rejected;
+      await expect(
+        treasury.connect(recipient2).lock([nftId2])
+      ).to.be.rejectedWith("Invalid token1");
     });
     it("Should be not reverted if ticks in range", async () => {
       const { treasury, nft } = await loadFixture(fixture);
@@ -273,12 +444,20 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       };
       await nft.mint(params1);
       await nft.mint(params2);
-      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
-      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient1.address,
+        0
+      );
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient2.address,
+        0
+      );
       await nft.connect(recipient1).approve(treasury.address, nftId1);
       await nft.connect(recipient2).approve(treasury.address, nftId2);
-      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
-      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.not.rejected;
+      await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not
+        .rejected;
+      await expect(treasury.connect(recipient2).lock([nftId2])).to.be.not
+        .rejected;
     });
   });
   describe("WithdrawExpiredLocks", () => {
@@ -295,14 +474,17 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
       await time.increase(60 * 60 * 24 * 10); // 10 days
-      await treasury.connect(recipient)['withdrawExpiredLocks()']();
+      await treasury.connect(recipient)["withdrawExpiredLocks()"]();
       expect(await nft.ownerOf(nftId)).to.be.equal(treasury.address);
       await time.increase(60 * 60 * 24 * 46); // 46 days
-      await treasury.connect(recipient)['withdrawExpiredLocks()']();
+      await treasury.connect(recipient)["withdrawExpiredLocks()"]();
       expect(await nft.ownerOf(nftId)).to.be.equal(recipient.address);
     });
     it("Should be imposible withdraw when public exit diactivated and locks not expired", async () => {
@@ -318,12 +500,15 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
       const owner1: string = await nft.ownerOf(nftId);
       await time.increase(86400 * 10);
-      await treasury.connect(recipient)['withdrawExpiredLocks()']();
+      await treasury.connect(recipient)["withdrawExpiredLocks()"]();
       const owner2: string = await nft.ownerOf(nftId);
       expect(owner1).to.be.equal(treasury.address);
       expect(owner2).to.be.equal(treasury.address);
@@ -341,13 +526,16 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
       const owner1: string = await nft.ownerOf(nftId);
       await time.increase(86400 * 10);
       await treasury.publicExit();
-      await treasury.connect(recipient)['withdrawExpiredLocks()']();
+      await treasury.connect(recipient)["withdrawExpiredLocks()"]();
       const owner2: string = await nft.ownerOf(nftId);
       expect(owner1).to.be.equal(treasury.address);
       expect(owner2).to.be.equal(recipient.address);
@@ -365,14 +553,19 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const accountLiquidity1: AccountLiquidityOutput = await treasury.accountLiquidity(recipient.address);
+      const accountLiquidity1: AccountLiquidityOutput =
+        await treasury.accountLiquidity(recipient.address);
       const liquiditySupply1: BigNumber = await treasury.liquiditySupply();
       await time.increase(86400 * 56);
-      await treasury.connect(recipient)['withdrawExpiredLocks()']();
-      const accountLiquidity2: AccountLiquidityOutput = await treasury.accountLiquidity(recipient.address);
+      await treasury.connect(recipient)["withdrawExpiredLocks()"]();
+      const accountLiquidity2: AccountLiquidityOutput =
+        await treasury.accountLiquidity(recipient.address);
       const liquiditySupply2: BigNumber = await treasury.liquiditySupply();
       expect(accountLiquidity1.total).to.be.equal(100);
       expect(liquiditySupply1).to.be.equal(100);
@@ -394,14 +587,21 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
       await time.increase(60 * 60 * 24 * 10); // 10 days
-      await treasury.connect(recipient)['withdrawExpiredLocks(uint256[])']([nftId]);
+      await treasury
+        .connect(recipient)
+        ["withdrawExpiredLocks(uint256[])"]([nftId]);
       expect(await nft.ownerOf(nftId)).to.be.equal(treasury.address);
       await time.increase(60 * 60 * 24 * 46); // 46 days
-      await treasury.connect(recipient)['withdrawExpiredLocks(uint256[])']([nftId]);
+      await treasury
+        .connect(recipient)
+        ["withdrawExpiredLocks(uint256[])"]([nftId]);
       expect(await nft.ownerOf(nftId)).to.be.equal(recipient.address);
     });
     it("Should be imposible withdraw when public exit diactivated and locks not expired", async () => {
@@ -417,12 +617,17 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
       const owner1: string = await nft.ownerOf(nftId);
       await time.increase(86400 * 10);
-      await treasury.connect(recipient)['withdrawExpiredLocks(uint256[])']([nftId]);
+      await treasury
+        .connect(recipient)
+        ["withdrawExpiredLocks(uint256[])"]([nftId]);
       const owner2: string = await nft.ownerOf(nftId);
       expect(owner1).to.be.equal(treasury.address);
       expect(owner2).to.be.equal(treasury.address);
@@ -440,13 +645,18 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
       const owner1: string = await nft.ownerOf(nftId);
       await time.increase(86400 * 10);
       await treasury.publicExit();
-      await treasury.connect(recipient)['withdrawExpiredLocks(uint256[])']([nftId]);
+      await treasury
+        .connect(recipient)
+        ["withdrawExpiredLocks(uint256[])"]([nftId]);
       const owner2: string = await nft.ownerOf(nftId);
       expect(owner1).to.be.equal(treasury.address);
       expect(owner2).to.be.equal(recipient.address);
@@ -464,14 +674,21 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const accountLiquidity1: AccountLiquidityOutput = await treasury.accountLiquidity(recipient.address);
+      const accountLiquidity1: AccountLiquidityOutput =
+        await treasury.accountLiquidity(recipient.address);
       const liquiditySupply1: BigNumber = await treasury.liquiditySupply();
       await time.increase(86400 * 56);
-      await treasury.connect(recipient)['withdrawExpiredLocks(uint256[])']([nftId]);
-      const accountLiquidity2: AccountLiquidityOutput = await treasury.accountLiquidity(recipient.address);
+      await treasury
+        .connect(recipient)
+        ["withdrawExpiredLocks(uint256[])"]([nftId]);
+      const accountLiquidity2: AccountLiquidityOutput =
+        await treasury.accountLiquidity(recipient.address);
       const liquiditySupply2: BigNumber = await treasury.liquiditySupply();
       expect(accountLiquidity1.total).to.be.equal(100);
       expect(liquiditySupply1).to.be.equal(100);
@@ -491,8 +708,13 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
-      await expect(treasury.connect(recipient)['withdrawExpiredLocks(uint256[])']([nftId])).to.be.rejectedWith('Not locked');
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
+      await expect(
+        treasury.connect(recipient)["withdrawExpiredLocks(uint256[])"]([nftId])
+      ).to.be.rejectedWith("Not locked");
     });
   });
   describe("accountLiquidity", () => {
@@ -509,18 +731,29 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const liquidity0: { total: BigNumber; locked: BigNumber; unlockable: BigNumber; } = await treasury.accountLiquidity(recipient.address);
-      expect(liquidity0.total).to.be.equal('100');
-      expect(liquidity0.locked).to.be.equal('100');
+      const liquidity0: {
+        total: BigNumber;
+        locked: BigNumber;
+        unlockable: BigNumber;
+      } = await treasury.accountLiquidity(recipient.address);
+      expect(liquidity0.total).to.be.equal("100");
+      expect(liquidity0.locked).to.be.equal("100");
       expect(liquidity0.unlockable).to.be.equal(0);
       await time.increase(60 * 60 * 24 * 56); // 56 days
-      const liquidity1: { total: BigNumber; locked: BigNumber; unlockable: BigNumber; } = await treasury.accountLiquidity(recipient.address);
-      expect(liquidity1.total).to.be.equal('100');
+      const liquidity1: {
+        total: BigNumber;
+        locked: BigNumber;
+        unlockable: BigNumber;
+      } = await treasury.accountLiquidity(recipient.address);
+      expect(liquidity1.total).to.be.equal("100");
       expect(liquidity1.locked).to.be.equal(0);
-      expect(liquidity1.unlockable).to.be.equal('100');
+      expect(liquidity1.unlockable).to.be.equal("100");
     });
   });
   describe("accountAllNFTs", () => {
@@ -537,14 +770,18 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
-      const nextMineTime: number = await time.latest() + 1;
+      const nextMineTime: number = (await time.latest()) + 1;
       await treasury.connect(recipient).lock([nftId]);
-      const nfts0: MultiFeeDistributionV3.LockedNFTStructOutput[] = await treasury.accountAllNFTs(recipient.address);
+      const nfts0: MultiFeeDistributionV3.LockedNFTStructOutput[] =
+        await treasury.accountAllNFTs(recipient.address);
       expect(nfts0.length).to.be.equal(1);
       expect(nfts0[0].id).to.be.equal(nftId);
-      expect(nfts0[0].liquidity).to.be.equal('100');
+      expect(nfts0[0].liquidity).to.be.equal("100");
       expect(nfts0[0].unlockTime).to.be.equal(nextMineTime + 60 * 60 * 24 * 56); // now + 56 days
     });
   });
@@ -562,17 +799,22 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
-      const nextMineTime: number = await time.latest() + 1;
+      const nextMineTime: number = (await time.latest()) + 1;
       await treasury.connect(recipient).lock([nftId]);
-      const nfts0: MultiFeeDistributionV3.LockedNFTStructOutput[] = await treasury.accountLockedNFTs(recipient.address);
+      const nfts0: MultiFeeDistributionV3.LockedNFTStructOutput[] =
+        await treasury.accountLockedNFTs(recipient.address);
       expect(nfts0.length).to.be.equal(1);
       expect(nfts0[0].id).to.be.equal(nftId);
-      expect(nfts0[0].liquidity).to.be.equal('100');
+      expect(nfts0[0].liquidity).to.be.equal("100");
       expect(nfts0[0].unlockTime).to.be.equal(nextMineTime + 60 * 60 * 24 * 56); // now + 56 days
       await time.increase(60 * 60 * 24 * 56); // 56 days
-      const nfts1: MultiFeeDistributionV3.LockedNFTStructOutput[] = await treasury.accountLockedNFTs(recipient.address);
+      const nfts1: MultiFeeDistributionV3.LockedNFTStructOutput[] =
+        await treasury.accountLockedNFTs(recipient.address);
       expect(nfts1.length).to.be.equal(0);
     });
   });
@@ -590,17 +832,22 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
-      const nextMineTime: number = await time.latest() + 1;
+      const nextMineTime: number = (await time.latest()) + 1;
       await treasury.connect(recipient).lock([nftId]);
-      const nfts0: MultiFeeDistributionV3.LockedNFTStructOutput[] = await treasury.accountUnlockableNFTs(recipient.address);
+      const nfts0: MultiFeeDistributionV3.LockedNFTStructOutput[] =
+        await treasury.accountUnlockableNFTs(recipient.address);
       expect(nfts0.length).to.be.equal(0);
       await time.increase(60 * 60 * 24 * 56); // 56 days
-      const nfts1: MultiFeeDistributionV3.LockedNFTStructOutput[] = await treasury.accountUnlockableNFTs(recipient.address);
+      const nfts1: MultiFeeDistributionV3.LockedNFTStructOutput[] =
+        await treasury.accountUnlockableNFTs(recipient.address);
       expect(nfts1.length).to.be.equal(1);
       expect(nfts1[0].id).to.be.equal(nftId);
-      expect(nfts1[0].liquidity).to.be.equal('100');
+      expect(nfts1[0].liquidity).to.be.equal("100");
       expect(nfts1[0].unlockTime).to.be.equal(nextMineTime + 60 * 60 * 24 * 56); // now + 56 days
     });
   });
@@ -618,22 +865,36 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
       const minter: string = await treasury.incentivesController();
-      const minterSigner: SignerWithAddress = await ethers.getImpersonatedSigner(minter);
-      await ethers.provider.send("hardhat_setBalance", [minterSigner.address, BigNumber.from('1000000000000000000000').toHexString()]);
-      const amountInWei = ethers.utils.parseEther('1000');
-      const balance0: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
+      const minterSigner: SignerWithAddress =
+        await ethers.getImpersonatedSigner(minter);
+      await ethers.provider.send("hardhat_setBalance", [
+        minterSigner.address,
+        BigNumber.from("1000000000000000000000").toHexString(),
+      ]);
+      const amountInWei = ethers.utils.parseEther("1000");
+      const balance0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
       await treasury.connect(minterSigner).mint(treasury.address, amountInWei);
-      const balance1: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
+      const balance1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
       expect(balance1.sub(balance0)).to.be.equal(amountInWei);
-      const earnedBalances: { total: BigNumber; } = await treasury.earnedBalances(treasury.address);
+      const earnedBalances: { total: BigNumber } =
+        await treasury.earnedBalances(treasury.address);
       expect(earnedBalances.total).to.be.equal(0);
     });
     it("Should be able to mint to address", async () => {
-      const { treasury, nft, tokens, minterSigner } = await loadFixture(fixture);
+      const { treasury, nft, tokens, minterSigner } = await loadFixture(
+        fixture
+      );
       const [recipient] = await ethers.getSigners();
       const params: UniswapNFTMock.MintParamsStruct = {
         recipient: recipient.address,
@@ -645,15 +906,23 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const amountInWei = ethers.utils.parseEther('1000');
-      const balance0: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
+      const amountInWei = ethers.utils.parseEther("1000");
+      const balance0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
       await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
-      const balance1: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
+      const balance1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
       expect(balance1.sub(balance0)).to.be.equal(amountInWei);
-      const earnedBalances: { total: BigNumber; } = await treasury.earnedBalances(recipient.address);
+      const earnedBalances: { total: BigNumber } =
+        await treasury.earnedBalances(recipient.address);
       expect(earnedBalances.total).to.be.equal(amountInWei);
     });
   });
@@ -671,15 +940,49 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const earnedBalances0: { total: BigNumber; } = await treasury.earnedBalances(recipient.address);
-      const amountInWei = ethers.utils.parseEther('1000');
+      const earnedBalances0: { total: BigNumber } =
+        await treasury.earnedBalances(recipient.address);
+      const amountInWei = ethers.utils.parseEther("1000");
       await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
       expect(earnedBalances0.total).to.be.equal(0);
-      const earnedBalances1: { total: BigNumber; } = await treasury.earnedBalances(recipient.address);
+      const earnedBalances1: { total: BigNumber } =
+        await treasury.earnedBalances(recipient.address);
       expect(earnedBalances1.total).to.be.equal(amountInWei);
+    });
+    it("Should be return correct earned balances: mint -> wait (vesting duration) -> mint", async () => {
+      const { treasury, minterSigner } = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const amountInWei: BigNumber = ethers.utils.parseEther("1000");
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      await time.increase(86400 * 28);
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      const balance = await treasury.earnedBalances(recipient.address);
+      console.log('Balance', balance);
+      expect(balance.total).to.be.equal(amountInWei);
+      expect(balance.earningsData.length).to.be.equal(1);
+      expect(balance.earningsData[0].amount).to.be.equal(amountInWei);
+      // await treasury.connect(recipient).withdraw();
+    });
+    it("Should be return correct earned balances: mint -> wait (vesting duration) -> mint -> wait (vesting duration) -> mint", async () => {
+      const { treasury, minterSigner } = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const amountInWei: BigNumber = ethers.utils.parseEther("1000");
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      await time.increase(86400 * 28);
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      await time.increase(86400 * 28);
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      const balance = await treasury.earnedBalances(recipient.address);
+      console.log('Balance', balance);
+      expect(balance.total).to.be.equal(amountInWei);
+      expect(balance.earningsData.length).to.be.equal(1);
+      expect(balance.earningsData[0].amount).to.be.equal(amountInWei);
     });
   });
   describe("withdrawableBalance", () => {
@@ -696,28 +999,77 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const amountInWei0 = ethers.utils.parseEther('1000');
-      const amountInWei1 = ethers.utils.parseEther('2000');
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei0);
+      const amountInWei0 = ethers.utils.parseEther("1000");
+      const amountInWei1 = ethers.utils.parseEther("2000");
+      await treasury
+        .connect(minterSigner)
+        .mint(recipient.address, amountInWei0);
       await time.increase(86400 * 10);
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei1);
-      const balances0: WithdrawableBalanceOutput = await treasury.withdrawableBalance(recipient.address);
+      await treasury
+        .connect(minterSigner)
+        .mint(recipient.address, amountInWei1);
+      const balances0: WithdrawableBalanceOutput =
+        await treasury.withdrawableBalance(recipient.address);
       await time.increase(86400 * 20);
-      const balances1: WithdrawableBalanceOutput = await treasury.withdrawableBalance(recipient.address);
+      const balances1: WithdrawableBalanceOutput =
+        await treasury.withdrawableBalance(recipient.address);
       await time.increase(86400 * 30);
-      const balances2: WithdrawableBalanceOutput = await treasury.withdrawableBalance(recipient.address);
-      expect(balances0.amount).to.be.equal(amountInWei0.add(amountInWei1).div(2));
-      expect(balances0.penaltyAmount).to.be.equal(amountInWei0.add(amountInWei1).div(2));
+      const balances2: WithdrawableBalanceOutput =
+        await treasury.withdrawableBalance(recipient.address);
+      expect(balances0.amount).to.be.equal(
+        amountInWei0.add(amountInWei1).div(2)
+      );
+      expect(balances0.penaltyAmount).to.be.equal(
+        amountInWei0.add(amountInWei1).div(2)
+      );
       expect(balances0.amountWithoutPenalty).to.be.equal(0);
-      expect(balances1.amount).to.be.equal(amountInWei0.add(amountInWei1.div(2)));
+      expect(balances1.amount).to.be.equal(
+        amountInWei0.add(amountInWei1.div(2))
+      );
       expect(balances1.penaltyAmount).to.be.equal(amountInWei1.div(2));
       expect(balances1.amountWithoutPenalty).to.be.equal(amountInWei1.div(2));
       expect(balances2.amount).to.be.equal(amountInWei0.add(amountInWei1));
       expect(balances2.penaltyAmount).to.be.equal(0);
-      expect(balances2.amountWithoutPenalty).to.be.equal(amountInWei0.add(amountInWei1));
+      expect(balances2.amountWithoutPenalty).to.be.equal(
+        amountInWei0.add(amountInWei1)
+      );
+    });
+    it("Should be correct work if earned = 0", async () => {
+      const { treasury } = await loadFixture(fixture);
+      const balance: WithdrawableBalanceOutput = await treasury.withdrawableBalance('0x0000000000000000000000000000000000000001');
+      expect(balance.amount).to.be.equal(0);
+      expect(balance.penaltyAmount).to.be.equal(0);
+      expect(balance.amountWithoutPenalty).to.be.equal(0);
+    });
+    it("Should be correct work when minting reward tokens at the user address", async () => {
+      const { treasury, minterSigner } = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const amountInWei: BigNumber = ethers.utils.parseEther("1000");
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      const balance: WithdrawableBalanceOutput = await treasury.withdrawableBalance(recipient.address);
+      expect(balance.amount).to.be.equal(amountInWei.div(2));
+      expect(balance.penaltyAmount).to.be.equal(amountInWei.div(2));
+      expect(balance.amountWithoutPenalty).to.be.equal(0);
+    });
+    it("Should be correct work by scenario: mint -> wait (vesting duration) -> mint -> withdraw", async () => {
+      const { treasury, minterSigner } = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const amountInWei: BigNumber = ethers.utils.parseEther("1000");
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      await time.increase(86400 * 28);
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      await treasury.connect(recipient).withdraw();
+      const balance: WithdrawableBalanceOutput = await treasury.withdrawableBalance(recipient.address);
+
+      expect(balance.amount).to.be.equal(amountInWei.div(2));
+      expect(balance.penaltyAmount).to.be.equal(amountInWei.div(2));
+      expect(balance.amountWithoutPenalty).to.be.equal(0);
     });
   });
   describe("claimableRewards", () => {
@@ -743,20 +1095,29 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       });
 
-      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
-      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient1.address,
+        0
+      );
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient2.address,
+        0
+      );
       await nft.connect(recipient1).approve(treasury.address, nftId1);
       await nft.connect(recipient2).approve(treasury.address, nftId2);
       await treasury.connect(recipient1).lock([nftId1]);
       await treasury.connect(recipient2).lock([nftId2]);
-      const amountInWei1 = ethers.utils.parseEther('1000');
+      const amountInWei1 = ethers.utils.parseEther("1000");
       await treasury.connect(minterSigner).mint(treasury.address, amountInWei1);
       await time.increase(86400 * 10);
-      const claimableRewards1: MultiFeeDistributionUNIV3POS.RewardDataStructOutput[] = await treasury.claimableRewards(recipient1.address);
+      const claimableRewards1: MultiFeeDistributionUNIV3POS.RewardDataStructOutput[] =
+        await treasury.claimableRewards(recipient1.address);
       await time.increase(86400 * 20);
-      const claimableRewards2: MultiFeeDistributionUNIV3POS.RewardDataStructOutput[] = await treasury.claimableRewards(recipient1.address);
+      const claimableRewards2: MultiFeeDistributionUNIV3POS.RewardDataStructOutput[] =
+        await treasury.claimableRewards(recipient1.address);
       await time.increase(86400 * 30);
-      const claimableRewards3: MultiFeeDistributionUNIV3POS.RewardDataStructOutput[] = await treasury.claimableRewards(recipient1.address);
+      const claimableRewards3: MultiFeeDistributionUNIV3POS.RewardDataStructOutput[] =
+        await treasury.claimableRewards(recipient1.address);
       expect(claimableRewards1).to.be.deep.equal(claimableRewards2);
       expect(claimableRewards1).to.be.deep.equal(claimableRewards3);
       expect(amountInWei1.div(2).sub(claimableRewards1[0].amount)).to.be.lte(1);
@@ -766,7 +1127,9 @@ describe("MultiFeeDistributionUNIV3POS", () => {
   });
   describe("exit", () => {
     it("Should be able to exit early", async () => {
-      const { treasury, nft, minterSigner, tokens } = await loadFixture(fixture);
+      const { treasury, nft, minterSigner, tokens } = await loadFixture(
+        fixture
+      );
       const [recipient] = await ethers.getSigners();
       const params: UniswapNFTMock.MintParamsStruct = {
         recipient: recipient.address,
@@ -778,25 +1141,42 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const amountInWei0 = ethers.utils.parseEther('1000');
-      const ownerBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei0);
+      const amountInWei0 = ethers.utils.parseEther("1000");
+      const ownerBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
+      await treasury
+        .connect(minterSigner)
+        .mint(recipient.address, amountInWei0);
       await time.increase(86400 * 10);
-      const treasuryBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
+      const treasuryBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
       await treasury.connect(recipient).exit(recipient.address);
-      const treasuryBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
-      const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
+      const treasuryBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
+      const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
       expect(treasuryBalances0).to.be.equal(amountInWei0);
       expect(treasuryBalances1).to.be.equal(amountInWei0.div(2));
-      expect(ownerBalances1).to.be.equal(amountInWei0.div(2).add(ownerBalances0));
+      expect(ownerBalances1).to.be.equal(
+        amountInWei0.div(2).add(ownerBalances0)
+      );
     });
   });
   describe("withdraw", () => {
-    it('Should be nothing if not enough time has passed', async () => {
-      const { treasury, nft, minterSigner, tokens } = await loadFixture(fixture);
+    it("Should be nothing if not enough time has passed", async () => {
+      const { treasury, nft, minterSigner, tokens } = await loadFixture(
+        fixture
+      );
       const [recipient] = await ethers.getSigners();
       const params: UniswapNFTMock.MintParamsStruct = {
         recipient: recipient.address,
@@ -808,19 +1188,30 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const amountInWei0 = ethers.utils.parseEther('1000');
-      const ownerBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei0);
+      const amountInWei0 = ethers.utils.parseEther("1000");
+      const ownerBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
+      await treasury
+        .connect(minterSigner)
+        .mint(recipient.address, amountInWei0);
       await time.increase(86400 * 10);
       await treasury.connect(recipient).withdraw();
-      const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
+      const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
       expect(ownerBalances1).to.be.equal(ownerBalances0);
     });
     it("Should be able to withdraw", async () => {
-      const { treasury, nft, minterSigner, tokens } = await loadFixture(fixture);
+      const { treasury, nft, minterSigner, tokens } = await loadFixture(
+        fixture
+      );
       const [recipient] = await ethers.getSigners();
       const params: UniswapNFTMock.MintParamsStruct = {
         recipient: recipient.address,
@@ -832,21 +1223,32 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const amountInWei0 = ethers.utils.parseEther('1000');
-      const ownerBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei0);
+      const amountInWei0 = ethers.utils.parseEther("1000");
+      const ownerBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
+      await treasury
+        .connect(minterSigner)
+        .mint(recipient.address, amountInWei0);
       await time.increase(86400 * 56);
       await treasury.connect(recipient).withdraw();
-      const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
+      const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
       expect(ownerBalances1).to.be.equal(amountInWei0.add(ownerBalances0));
     });
   });
   describe("GetReward", () => {
     it("Should be able to get reward (uwu,uToken)", async () => {
-      const { treasury, nft, minterSigner, tokens } = await loadFixture(fixture);
+      const { treasury, nft, minterSigner, tokens } = await loadFixture(
+        fixture
+      );
       await treasury.addReward(tokens.contracts.dai.address);
       const [recipient] = await ethers.getSigners();
       const params: UniswapNFTMock.MintParamsStruct = {
@@ -859,25 +1261,58 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const uwuAmountInWei = ethers.utils.parseEther('1000');
-      const daiAmountInWei = ethers.utils.parseEther('2000');
-      const uwuBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
-      const daiBalances0: BigNumber = await tokens.contracts.dai.balanceOf(recipient.address);
-      await treasury.connect(minterSigner).mint(treasury.address, uwuAmountInWei);
-      await tokens.contracts.dai.connect(tokens.holders.dai).transferFrom(tokens.holders.dai.address, treasury.address, daiAmountInWei);
-      await treasury.getReward([tokens.contracts.uwu.address, tokens.contracts.dai.address]);
+      const uwuAmountInWei = ethers.utils.parseEther("1000");
+      const daiAmountInWei = ethers.utils.parseEther("2000");
+      const uwuBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
+      const daiBalances0: BigNumber = await tokens.contracts.dai.balanceOf(
+        recipient.address
+      );
+      await treasury
+        .connect(minterSigner)
+        .mint(treasury.address, uwuAmountInWei);
+      await tokens.contracts.dai
+        .connect(tokens.holders.dai)
+        .transferFrom(
+          tokens.holders.dai.address,
+          treasury.address,
+          daiAmountInWei
+        );
+      await treasury.getReward([
+        tokens.contracts.uwu.address,
+        tokens.contracts.dai.address,
+      ]);
       await time.increase(86400 * 7);
-      await treasury.connect(recipient).getReward([tokens.contracts.uwu.address, tokens.contracts.dai.address]);
-      const uwuBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
-      const daiBalances1: BigNumber = await tokens.contracts.dai.balanceOf(recipient.address);
-      expect(uwuBalances1.sub(uwuBalances0.add(uwuAmountInWei))).to.be.lessThanOrEqual(1);
-      expect(daiBalances1.sub(daiBalances0.add(daiAmountInWei))).to.be.lessThanOrEqual(1);
+      await treasury
+        .connect(recipient)
+        .getReward([
+          tokens.contracts.uwu.address,
+          tokens.contracts.dai.address,
+        ]);
+      const uwuBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
+      const daiBalances1: BigNumber = await tokens.contracts.dai.balanceOf(
+        recipient.address
+      );
+      expect(
+        uwuBalances1.sub(uwuBalances0.add(uwuAmountInWei))
+      ).to.be.lessThanOrEqual(1);
+      expect(
+        daiBalances1.sub(daiBalances0.add(daiAmountInWei))
+      ).to.be.lessThanOrEqual(1);
     });
     it("Should be able distribute and get reward between lockers (uwu,uToken)", async () => {
-      const { treasury, nft, minterSigner, tokens } = await loadFixture(fixture);
+      const { treasury, nft, minterSigner, tokens } = await loadFixture(
+        fixture
+      );
       await treasury.addReward(tokens.contracts.dai.address);
       const [, recipient1, recipient2] = await ethers.getSigners();
       const params1: UniswapNFTMock.MintParamsStruct = {
@@ -890,7 +1325,10 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params1);
-      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(recipient1.address, 0);
+      const nftId1: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient1.address,
+        0
+      );
       await nft.connect(recipient1).approve(treasury.address, nftId1);
       await treasury.connect(recipient1).lock([nftId1]);
       const params2: UniswapNFTMock.MintParamsStruct = {
@@ -903,32 +1341,74 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 200,
       };
       await nft.mint(params2);
-      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(recipient2.address, 0);
+      const nftId2: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient2.address,
+        0
+      );
       await nft.connect(recipient2).approve(treasury.address, nftId2);
       await treasury.connect(recipient2).lock([nftId2]);
-      const liquidity0: AccountLiquidityOutput = await treasury.accountLiquidity(recipient1.address);
-      const liquidity2: AccountLiquidityOutput = await treasury.accountLiquidity(recipient2.address);
+      const liquidity0: AccountLiquidityOutput =
+        await treasury.accountLiquidity(recipient1.address);
+      const liquidity2: AccountLiquidityOutput =
+        await treasury.accountLiquidity(recipient2.address);
       const liquiditySupply: BigNumber = await treasury.liquiditySupply();
-      const uwuAmountInWei = ethers.utils.parseEther('1000');
-      const daiAmountInWei = ethers.utils.parseEther('2000');
-      const owner0UwuBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(recipient1.address);
-      const owner0DaiBalances0: BigNumber = await tokens.contracts.dai.balanceOf(recipient1.address);
-      const owner2UwuBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(recipient2.address);
-      const owner2DaiBalances0: BigNumber = await tokens.contracts.dai.balanceOf(recipient2.address);
-      await treasury.connect(minterSigner).mint(treasury.address, uwuAmountInWei);
-      await tokens.contracts.dai.connect(tokens.holders.dai).transferFrom(tokens.holders.dai.address, treasury.address, daiAmountInWei);
-      await treasury.getReward([tokens.contracts.uwu.address, tokens.contracts.dai.address]);
+      const uwuAmountInWei = ethers.utils.parseEther("1000");
+      const daiAmountInWei = ethers.utils.parseEther("2000");
+      const owner0UwuBalances0: BigNumber =
+        await tokens.contracts.uwu.balanceOf(recipient1.address);
+      const owner0DaiBalances0: BigNumber =
+        await tokens.contracts.dai.balanceOf(recipient1.address);
+      const owner2UwuBalances0: BigNumber =
+        await tokens.contracts.uwu.balanceOf(recipient2.address);
+      const owner2DaiBalances0: BigNumber =
+        await tokens.contracts.dai.balanceOf(recipient2.address);
+      await treasury
+        .connect(minterSigner)
+        .mint(treasury.address, uwuAmountInWei);
+      await tokens.contracts.dai
+        .connect(tokens.holders.dai)
+        .transferFrom(
+          tokens.holders.dai.address,
+          treasury.address,
+          daiAmountInWei
+        );
+      await treasury.getReward([
+        tokens.contracts.uwu.address,
+        tokens.contracts.dai.address,
+      ]);
       await time.increase(86400 * 7);
-      await treasury.connect(recipient1).getReward([tokens.contracts.uwu.address, tokens.contracts.dai.address]);
-      await treasury.connect(recipient2).getReward([tokens.contracts.uwu.address, tokens.contracts.dai.address]);
-      const owner0UwuBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(recipient1.address);
-      const owner0DaiBalances1: BigNumber = await tokens.contracts.dai.balanceOf(recipient1.address);
-      const owner2UwuBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(recipient2.address);
-      const owner2DaiBalances1: BigNumber = await tokens.contracts.dai.balanceOf(recipient2.address);
-      const needUwu0 = liquidity0.locked.mul(uwuAmountInWei).div(liquiditySupply);
-      const needDai0 = liquidity0.locked.mul(daiAmountInWei).div(liquiditySupply);
-      const needUwu2 = liquidity2.locked.mul(uwuAmountInWei).div(liquiditySupply);
-      const needDai2 = liquidity2.locked.mul(daiAmountInWei).div(liquiditySupply);
+      await treasury
+        .connect(recipient1)
+        .getReward([
+          tokens.contracts.uwu.address,
+          tokens.contracts.dai.address,
+        ]);
+      await treasury
+        .connect(recipient2)
+        .getReward([
+          tokens.contracts.uwu.address,
+          tokens.contracts.dai.address,
+        ]);
+      const owner0UwuBalances1: BigNumber =
+        await tokens.contracts.uwu.balanceOf(recipient1.address);
+      const owner0DaiBalances1: BigNumber =
+        await tokens.contracts.dai.balanceOf(recipient1.address);
+      const owner2UwuBalances1: BigNumber =
+        await tokens.contracts.uwu.balanceOf(recipient2.address);
+      const owner2DaiBalances1: BigNumber =
+        await tokens.contracts.dai.balanceOf(recipient2.address);
+      const needUwu0 = liquidity0.locked
+        .mul(uwuAmountInWei)
+        .div(liquiditySupply);
+      const needDai0 = liquidity0.locked
+        .mul(daiAmountInWei)
+        .div(liquiditySupply);
+      const needUwu2 = liquidity2.locked
+        .mul(uwuAmountInWei)
+        .div(liquiditySupply);
+      const needDai2 = liquidity2.locked
+        .mul(daiAmountInWei)
+        .div(liquiditySupply);
       expect(owner0UwuBalances1.sub(owner0UwuBalances0)).to.be.equal(needUwu0);
       expect(owner0DaiBalances1.sub(owner0DaiBalances0)).to.be.equal(needDai0);
       expect(owner2UwuBalances1.sub(owner2UwuBalances0)).to.be.equal(needUwu2);
@@ -939,12 +1419,30 @@ describe("MultiFeeDistributionUNIV3POS", () => {
     it("Should be able to add reward", async () => {
       const { treasury, tokens } = await loadFixture(fixture);
       await treasury.addReward(tokens.contracts.dai.address);
-      await expect(treasury.getReward([tokens.contracts.dai.address])).to.be.not.rejected;
+      await expect(treasury.getReward([tokens.contracts.dai.address])).to.be.not
+        .rejected;
+    });
+    it("Should be able to add reward only once", async () => {
+      const { treasury, tokens } = await loadFixture(fixture);
+      await expect(treasury.addReward(tokens.contracts.dai.address)).to.be.not.rejected;
+      await expect(treasury.addReward(tokens.contracts.dai.address)).to.be.rejectedWith('reward token already added');
+    });
+    it(("Should be able to add reward only by owner"), async () => {
+      const { treasury, tokens } = await loadFixture(fixture);
+      const [owner, notOwner] = await ethers.getSigners();
+      await expect(treasury.connect(notOwner).addReward(tokens.contracts.dai.address)).to.be.rejectedWith('Ownable: caller is not the owner');
+      await expect(treasury.connect(owner).addReward(tokens.contracts.dai.address)).to.be.not.rejected;
+    });
+    it("Should be rejected if reward token is zero address", async () => {
+      const { treasury } = await loadFixture(fixture);
+      await expect(treasury.addReward(ethers.constants.AddressZero)).to.be.rejectedWith('zero address');
     });
   });
   describe("delegateExit", () => {
     it("Should be able to delegate exit", async () => {
-      const { treasury, nft, minterSigner, tokens } = await loadFixture(fixture);
+      const { treasury, nft, minterSigner, tokens } = await loadFixture(
+        fixture
+      );
       const [, recipient, delegatedSigner] = await ethers.getSigners();
       const params: UniswapNFTMock.MintParamsStruct = {
         recipient: recipient.address,
@@ -956,19 +1454,36 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         liquidity: 100,
       };
       await nft.mint(params);
-      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(
+        recipient.address,
+        0
+      );
       await nft.connect(recipient).approve(treasury.address, nftId);
       await treasury.connect(recipient).lock([nftId]);
-      const amountInWei0 = ethers.utils.parseEther('1000');
-      const treasuryBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
-      const ownerBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei0);
-      const treasuryBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
+      const amountInWei0 = ethers.utils.parseEther("1000");
+      const treasuryBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
+      const ownerBalances0: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
+      await treasury
+        .connect(minterSigner)
+        .mint(recipient.address, amountInWei0);
+      const treasuryBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
       await time.increase(86400 * 28);
-      await treasury.connect(recipient).delegateExit(delegatedSigner.address);
+      await treasury
+        .connect(recipient)
+        .delegateExit(delegatedSigner.address);
       await treasury.connect(delegatedSigner).exit(recipient.address);
-      const treasuryBalances2: BigNumber = await tokens.contracts.uwu.balanceOf(treasury.address);
-      const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
+      const treasuryBalances2: BigNumber = await tokens.contracts.uwu.balanceOf(
+        treasury.address
+      );
+      const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(
+        recipient.address
+      );
       expect(treasuryBalances0).to.be.equal(0);
       expect(treasuryBalances1).to.be.equal(amountInWei0);
       expect(treasuryBalances2).to.be.equal(0);
@@ -979,16 +1494,22 @@ describe("MultiFeeDistributionUNIV3POS", () => {
     it("Should be able to get last time reward applicable", async () => {
       const { treasury, tokens, minterSigner } = await loadFixture(fixture);
       await time.increase(1);
-      const rewardData0: RewardDataOutput = await treasury.rewardData(tokens.contracts.uwu.address);
-      const lastTimeRewardApplicable0: BigNumber = await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
-      const amountInWei0 = ethers.utils.parseEther('1000');
-      const latestTime: number = await time.latest() + 1;
+      const rewardData0: RewardDataOutput = await treasury.rewardData(
+        tokens.contracts.uwu.address
+      );
+      const lastTimeRewardApplicable0: BigNumber =
+        await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
+      const amountInWei0 = ethers.utils.parseEther("1000");
+      const latestTime: number = (await time.latest()) + 1;
       await treasury.connect(minterSigner).mint(treasury.address, amountInWei0);
-      const lastTimeRewardApplicable1: BigNumber = await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
+      const lastTimeRewardApplicable1: BigNumber =
+        await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
       await time.increase(86400 * 7);
-      const lastTimeRewardApplicable2: BigNumber = await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
+      const lastTimeRewardApplicable2: BigNumber =
+        await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
       await time.increase(86400 * 7);
-      const lastTimeRewardApplicable3: BigNumber = await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
+      const lastTimeRewardApplicable3: BigNumber =
+        await treasury.lastTimeRewardApplicable(tokens.contracts.uwu.address);
       expect(lastTimeRewardApplicable0).to.be.equal(rewardData0.periodFinish);
       expect(lastTimeRewardApplicable1).to.be.equal(latestTime); //  + 86400 * 7
       expect(lastTimeRewardApplicable2).to.be.equal(latestTime + 86400 * 7);
@@ -996,11 +1517,12 @@ describe("MultiFeeDistributionUNIV3POS", () => {
     });
   });
   describe("publicExit", () => {
-    it('Should be possible call the method only the owner', async () => {
+    it("Should be possible call the method only the owner", async () => {
       const { treasury } = await loadFixture(fixture);
       const [owner, notOwner] = await ethers.getSigners();
       await expect(treasury.connect(notOwner).publicExit()).to.be.rejected;
-      await expect(treasury.connect(owner).publicExit()).to.be.not.rejected;
+      await expect(treasury.connect(owner).publicExit()).to.be.not
+        .rejected;
     });
     it("Should be able set public exit flag", async () => {
       const { treasury } = await loadFixture(fixture);
@@ -1012,11 +1534,13 @@ describe("MultiFeeDistributionUNIV3POS", () => {
     });
   });
   describe("setTeamRewardVault", () => {
-    it('Should be possible call the method only the owner', async () => {
+    it("Should be possible call the method only the owner", async () => {
       const { treasury } = await loadFixture(fixture);
       const [owner, notOwner] = await ethers.getSigners();
-      await expect(treasury.connect(notOwner).setTeamRewardVault(owner.address)).to.be.rejected;
-      await expect(treasury.connect(owner).setTeamRewardVault(owner.address)).to.be.not.rejected;
+      await expect(treasury.connect(notOwner).setTeamRewardVault(owner.address))
+        .to.be.rejected;
+      await expect(treasury.connect(owner).setTeamRewardVault(owner.address)).to
+        .be.not.rejected;
     });
     it("Should be able set team reward vault", async () => {
       const { treasury } = await loadFixture(fixture);
@@ -1027,13 +1551,21 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       expect(teamRewardVault1).to.not.be.equal(teamRewardVault0);
       expect(teamRewardVault1).to.be.equal(otherSigner.address);
     });
+    it("Should be rejected when set zero address", async () => {
+      const { treasury } = await loadFixture(fixture);
+      await expect(
+        treasury.setTeamRewardVault(ethers.constants.AddressZero)
+      ).to.be.rejectedWith("zero address");
+    });
   });
   describe("setTeamRewardFee", () => {
-    it('Should be possible call the method only the owner', async () => {
+    it("Should be possible call the method only the owner", async () => {
       const { treasury } = await loadFixture(fixture);
       const [owner, notOwner] = await ethers.getSigners();
-      await expect(treasury.connect(notOwner).setTeamRewardFee(1)).to.be.rejected;
-      await expect(treasury.connect(owner).setTeamRewardFee(1)).to.be.not.rejected;
+      await expect(treasury.connect(notOwner).setTeamRewardFee(1)).to.be
+        .rejected;
+      await expect(treasury.connect(owner).setTeamRewardFee(1)).to.be.not
+        .rejected;
     });
     it("Should be able set team reward fee", async () => {
       const { treasury } = await loadFixture(fixture);
@@ -1056,11 +1588,13 @@ describe("MultiFeeDistributionUNIV3POS", () => {
     });
   });
   describe("setMinters", () => {
-    it('Should be possible call the method only the owner', async () => {
+    it("Should be possible call the method only the owner", async () => {
       const { treasury } = await loadFixture(fixture);
       const [owner, notOwner] = await ethers.getSigners();
-      await expect(treasury.connect(notOwner).setMinters([owner.address])).to.be.rejected;
-      await expect(treasury.connect(owner).setMinters([owner.address])).to.be.not.rejected;
+      await expect(treasury.connect(notOwner).setMinters([owner.address])).to.be
+        .rejected;
+      await expect(treasury.connect(owner).setMinters([owner.address])).to.be
+        .not.rejected;
     });
     it("Should be able set minters", async () => {
       const { treasury, minterSigner } = await loadFixture(fixture);
@@ -1073,35 +1607,47 @@ describe("MultiFeeDistributionUNIV3POS", () => {
     });
   });
   describe("setIncentivesController", () => {
-    it('Should be possible call the method only the owner', async () => {
+    it("Should be possible call the method only the owner", async () => {
       const { treasury } = await loadFixture(fixture);
       const [owner, notOwner] = await ethers.getSigners();
-      await expect(treasury.connect(notOwner).setIncentivesController(owner.address)).to.be.rejected;
-      await expect(treasury.connect(owner).setIncentivesController(owner.address)).to.be.not.rejected;
+      await expect(
+        treasury.connect(notOwner).setIncentivesController(owner.address)
+      ).to.be.rejected;
+      await expect(
+        treasury.connect(owner).setIncentivesController(owner.address)
+      ).to.be.not.rejected;
     });
     it("Should be able set incentives controller", async () => {
-      const { treasury, minterSigner } = await loadFixture(fixture);
-      const [owner, otherSigner] = await ethers.getSigners();
-      const incentivesController0: string = await treasury.incentivesController();
+      const { treasury } = await loadFixture(fixture);
+      const [, otherSigner] = await ethers.getSigners();
+      const incentivesController0: string =
+        await treasury.incentivesController();
       await treasury.setIncentivesController(otherSigner.address);
-      const incentivesController1: string = await treasury.incentivesController();
+      const incentivesController1: string =
+        await treasury.incentivesController();
       expect(incentivesController1).to.not.be.equal(incentivesController0);
       expect(incentivesController1).to.be.equal(otherSigner.address);
     });
+    it("Should be rejected when set zero address", async () => {
+      const { treasury } = await loadFixture(fixture);
+      await expect(treasury.setIncentivesController(ethers.constants.AddressZero)).to.be.rejectedWith('zero address');
+    });
   });
   describe("SetPositionConfig", () => {
-    it('Should be possible call the method only the owner', async () => {
+    it("Should be possible call the method only the owner", async () => {
       const { treasury } = await loadFixture(fixture);
       const [owner, notOwner] = await ethers.getSigners();
       const posConfig: MultiFeeDistributionUNIV3POS.PositionConfigStruct = {
-        token0: '0x0000000000000000000000000000000000000001',
-        token1: '0x0000000000000000000000000000000000000002',
+        token0: "0x0000000000000000000000000000000000000001",
+        token1: "0x0000000000000000000000000000000000000002",
         fee: 100,
         tickLower: 1,
         tickUpper: 2,
-      }
-      await expect(treasury.connect(notOwner).setPositionConfig(posConfig)).to.be.rejected;
-      await expect(treasury.connect(owner).setPositionConfig(posConfig)).to.be.not.rejected;
+      };
+      await expect(treasury.connect(notOwner).setPositionConfig(posConfig)).to
+        .be.rejected;
+      await expect(treasury.connect(owner).setPositionConfig(posConfig)).to.be
+        .not.rejected;
     });
     it("Should be able set position config", async () => {
       const { treasury } = await loadFixture(fixture);
@@ -1113,8 +1659,8 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         tickUpper: number;
       } = await treasury.posConfig();
       await treasury.setPositionConfig({
-        token0: '0x0000000000000000000000000000000000000001',
-        token1: '0x0000000000000000000000000000000000000002',
+        token0: "0x0000000000000000000000000000000000000001",
+        token1: "0x0000000000000000000000000000000000000002",
         fee: 200,
         tickLower: 1,
         tickUpper: 2,
@@ -1129,39 +1675,70 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       expect(posConfig1.token0).to.be.equal(POSITION_CONFIG.token0);
       expect(posConfig1.token1).to.be.equal(POSITION_CONFIG.token1);
       expect(posConfig1.fee.toString()).to.be.equal(POSITION_CONFIG.fee);
-      expect(posConfig1.tickLower.toString()).to.be.equal(POSITION_CONFIG.tickLower);
-      expect(posConfig1.tickUpper.toString()).to.be.equal(POSITION_CONFIG.tickUpper);
+      expect(posConfig1.tickLower.toString()).to.be.equal(
+        POSITION_CONFIG.tickLower
+      );
+      expect(posConfig1.tickUpper.toString()).to.be.equal(
+        POSITION_CONFIG.tickUpper
+      );
 
-      expect(posConfig2.token0).to.be.equal('0x0000000000000000000000000000000000000001');
-      expect(posConfig2.token1).to.be.equal('0x0000000000000000000000000000000000000002');
+      expect(posConfig2.token0).to.be.equal(
+        "0x0000000000000000000000000000000000000001"
+      );
+      expect(posConfig2.token1).to.be.equal(
+        "0x0000000000000000000000000000000000000002"
+      );
       expect(posConfig2.fee).to.be.equal(200);
       expect(posConfig2.tickLower).to.be.equal(1);
       expect(posConfig2.tickUpper).to.be.equal(2);
     });
-    it("Should be rejected with incorrect imputs", async () => {
+    it('Should be rejected when token0 zero address', async () => {
       const { treasury } = await loadFixture(fixture);
-      await expect(treasury.setPositionConfig({
-        token0: ethers.constants.AddressZero,
-        token1: '0x0000000000000000000000000000000000000002',
-        fee: 200,
-        tickLower: 1,
-        tickUpper: 2,
-      })).to.be.rejected;
-      await expect(treasury.setPositionConfig({
-        token0: '0x0000000000000000000000000000000000000001',
-        token1: ethers.constants.AddressZero,
-        fee: 200,
-        tickLower: 1,
-        tickUpper: 2,
-      })).to.be.rejected;
-      await expect(treasury.setPositionConfig({
-        token0: '0x0000000000000000000000000000000000000001',
-        token1: '0x0000000000000000000000000000000000000002',
-        fee: 200,
-        tickLower: 2,
-        tickUpper: 2,
-      })).to.be.rejected;
+      await expect(
+        treasury.setPositionConfig({
+          token0: ethers.constants.AddressZero,
+          token1: "0x0000000000000000000000000000000000000001",
+          fee: 200,
+          tickLower: 1,
+          tickUpper: 2,
+        })
+      ).to.be.rejectedWith("token0 zero address");
+    });
+    it('Should be rejected when token1 zero address', async () => {
+      const { treasury } = await loadFixture(fixture);
+      await expect(
+        treasury.setPositionConfig({
+          token0: "0x0000000000000000000000000000000000000001",
+          token1: ethers.constants.AddressZero,
+          fee: 200,
+          tickLower: 1,
+          tickUpper: 2,
+        })
+      ).to.be.rejectedWith("token1 zero address");
+    });
+    it('Should be rejected when token0 and token1 equals', async () => {
+      const { treasury } = await loadFixture(fixture);
+      await expect(
+        treasury.setPositionConfig({
+          token0: "0x0000000000000000000000000000000000000001",
+          token1: "0x0000000000000000000000000000000000000001",
+          fee: 200,
+          tickLower: 1,
+          tickUpper: 2,
+        })
+      ).to.be.rejectedWith("same tokens");
+    });
+    it('Should be rejected when lower tick greater or equals upper tick', async () => {
+      const { treasury } = await loadFixture(fixture);
+      await expect(
+        treasury.setPositionConfig({
+          token0: "0x0000000000000000000000000000000000000001",
+          token1: "0x0000000000000000000000000000000000000002",
+          fee: 200,
+          tickLower: 1,
+          tickUpper: 1,
+        })
+      ).to.be.rejectedWith("invalid tick range");
     });
   });
 });
-

@@ -32,6 +32,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   event PositionConfigUpdated(address indexed token0, address indexed token1, uint24 fee, int24 tickLower, int24 tickUpper);
   event RewardAdded(address indexed token);
   event DelegateExitUpdated(address indexed user, address indexed delegatee);
+  event Kicked(address indexed user, uint256 indexed nftId);
 
   struct Reward {
     uint256 periodFinish;
@@ -98,6 +99,13 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   IERC721 public immutable nft;
   IERC20 public immutable rewardToken;
   address public immutable rewardTokenVault;
+
+  address public immutable token0;
+  address public immutable token1;
+  uint256 public immutable fee;
+  int24 public immutable tickLower;
+  int24 public immutable tickUpper;
+
   address public teamRewardVault;
   uint256 public teamRewardFee = 2000; // 1% = 100
   address[] public rewardTokens;
@@ -111,19 +119,20 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   mapping(address => LockedBalance[]) private userEarnings; // vesting UwU tokens
   mapping(address => address) public exitDelegatee;
 
-  PositionConfig public posConfig;
-
-
   constructor(IERC721 _nft, PositionConfig memory _posConfig, IERC20 _rewardToken, address _rewardTokenVault) {
-    require(address(_nft) != address(0), 'zero address');
-    require(_posConfig.token0 != address(0), 'zero address');
-    require(_posConfig.token1 != address(0), 'zero address');
-    require(_posConfig.token0 != _posConfig.token1, 'same token');
+    require(address(_nft) != address(0), 'nft zero address');
+    require(_posConfig.token0 != address(0), 'token0 zero address');
+    require(_posConfig.token1 != address(0), 'token1 zero address');
+    require(_posConfig.token0 != _posConfig.token1, 'same tokens');
     require(_posConfig.tickLower < _posConfig.tickUpper, 'invalid tick range');
-    require(address(_rewardToken) != address(0), 'zero address');
-    require(_rewardTokenVault != address(0), 'zero address');
+    require(address(_rewardToken) != address(0), 'rewardToken zero address');
+    require(_rewardTokenVault != address(0), 'rewardTokenVault zero address');
     nft = _nft;
-    posConfig = _posConfig;
+    token0 = _posConfig.token0;
+    token1 = _posConfig.token1;
+    fee = _posConfig.fee;
+    tickLower = _posConfig.tickLower;
+    tickUpper = _posConfig.tickUpper;
     rewardToken = _rewardToken;
     rewardTokenVault = _rewardTokenVault;
     rewardTokens.push(address(_rewardToken));
@@ -150,10 +159,10 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   function setMinters(address[] calldata _minters) external onlyOwner {
     uint256 length = minters.length();
     for (uint256 i = 0; i < length; i++) {
-      require(minters.remove(minters.at(0)), 'Fail to remove minter');
+      minters.remove(minters.at(0));
     }
     for (uint256 i = 0; i < _minters.length; i++) {
-      require(minters.add(_minters[i]), 'Fail to add minter');
+      minters.add(_minters[i]);
     }
     emit MintersUpdated(_minters);
   }
@@ -162,15 +171,6 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     require(address(_controller) != address(0), 'zero address');
     incentivesController = _controller;
     emit IncentivesControllerUpdated(address(_controller));
-  }
-
-  function setPositionConfig(PositionConfig memory _posConfig) external onlyOwner {
-    require(_posConfig.token0 != address(0), 'zero address');
-    require(_posConfig.token1 != address(0), 'zero address');
-    require(_posConfig.token0 != _posConfig.token1, 'same token');
-    require(_posConfig.tickLower < _posConfig.tickUpper, 'invalid tick range');
-    posConfig = _posConfig;
-    emit PositionConfigUpdated(_posConfig.token0, _posConfig.token1, _posConfig.fee, _posConfig.tickLower, _posConfig.tickUpper);
   }
 
    // Add a new reward token to be distributed to stakers
@@ -312,14 +312,14 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     _updateReward(sender);
     for (uint256 i = 0; i < nftIds.length; i++) {
       uint256 nftId = nftIds[i];
-      ( , , address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, , , , ) = IUniswapV3PositionManager(address(nft)).positions(nftId);
-      require(posConfig.tickLower <= tickLower, 'Exceeded lower tick range');
-      require(posConfig.tickUpper >= tickUpper, 'Exceeded upper tick range');
-      require(posConfig.fee == fee, 'Invalid fee');
-      require(posConfig.token0 == token0, 'Invalid token0');
-      require(posConfig.token1 == token1, 'Invalid token1');
+      ( , , address _token0, address _token1, uint24 _fee, int24 _tickLower, int24 _tickUpper, uint128 liquidity, , , , ) = IUniswapV3PositionManager(address(nft)).positions(nftId);
+      require(tickLower == _tickLower, 'Invalid lower tick');
+      require(tickUpper == _tickUpper, 'Invalid upper tick');
+      require(fee == _fee, 'Invalid fee');
+      require(token0 == _token0, 'Invalid token0');
+      require(token1 == _token1, 'Invalid token1');
       require(liquidity > 0, 'Invalid liquidity');
-      require(lockedNFTs[sender].add(nftId), 'Fail to add lockedNFTs');
+      lockedNFTs[sender].add(nftId);
       nfts[nftId].owner = sender;
       nfts[nftId].liquidity = liquidity;
       nfts[nftId].unlockTime = block.timestamp.add(lockDuration);
@@ -343,7 +343,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
         uint256 liquidity = nfts[nftId].liquidity;
         liquiditySupply = liquiditySupply.sub(liquidity);
         liquidities[sender] = liquidities[sender].sub(liquidity);
-        require(lockedNFTs[sender].remove(nftId), 'Fail to remove lockedNFTs');
+        lockedNFTs[sender].remove(nftId);
         delete nfts[nftId];
         nft.safeTransferFrom(address(this), sender, nftId);
         emit WithdrawnExpiredLocks(sender, nftId);
@@ -365,7 +365,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
         uint256 liquidity = nfts[nftId].liquidity;
         liquiditySupply = liquiditySupply.sub(liquidity);
         liquidities[sender] = liquidities[sender].sub(liquidity);
-        require(lockedNFTs[sender].remove(nftId), 'Fail to remove lockedNFTs');
+        lockedNFTs[sender].remove(nftId);
         delete nfts[nftId];
         nft.safeTransferFrom(address(this), sender, nftId);
         emit WithdrawnExpiredLocks(sender, nftId);
@@ -555,6 +555,28 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     require(!publicExitAreSet, 'public exit are set');
     publicExitAreSet = true;
     emit PublicExit();
+  }
+
+  /**
+   * @notice Kick users from contract
+   * @param users List of users to kick
+   */
+  function kick(address[] calldata users) external onlyOwner {
+    require(publicExitAreSet, 'public exit not set');
+    for (uint256 i = 0; i < users.length; i++) {
+      address user = users[i];
+      uint256[] memory nftIds = lockedNFTs[user].values();
+      for (uint256 j = 0; j < nftIds.length; j++) {
+        uint256 nftId = nftIds[j];
+        uint256 liquidity = nfts[nftId].liquidity;
+        liquiditySupply = liquiditySupply.sub(liquidity);
+        liquidities[user] = liquidities[user].sub(liquidity);
+        lockedNFTs[user].remove(nftId);
+        delete nfts[nftId];
+        nft.safeTransferFrom(address(this), user, nftId);
+        emit Kicked(user, nftId);
+      }
+    }
   }
 
 }

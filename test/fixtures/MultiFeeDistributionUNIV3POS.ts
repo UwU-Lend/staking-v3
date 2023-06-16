@@ -47,7 +47,6 @@ type MintParams = {
 const DISTRIBUTOR_ADDRESS = '0x0a7B2A21027F92243C5e5E777aa30BB7969b0188';
 
 const fixture = async (): Promise<FixtureResult> => {
-  const [, owner1] = await ethers.getSigners();
   const TreasuryFactory: MultiFeeDistributionUNIV3POS__factory = await ethers.getContractFactory("MultiFeeDistributionUNIV3POS");
   const distributor = new ethers.Contract(DISTRIBUTOR_ADDRESS, distributorABI, ethers.provider);
   const rewardTokenAddress: string = await distributor.rewardToken();

@@ -341,7 +341,6 @@ describe("IncentivesControllerV3", () => {
       await time.increase(86400 * 5);
       await controllerV3.setup();
       await time.increase(86400 * 5);
-      // const userBaseClaimable1: BigNumber = await controllerV3.userBaseClaimable(user1.address);
       const userInfo = await controllerV2.userInfo(tokenAddress, user1.address);
       const blockTimestamp1: BigNumber = BigNumber.from(await time.increase(86400 * 5) + 1);
       const totalAllocPoint = await controllerV3.totalAllocPoint();
