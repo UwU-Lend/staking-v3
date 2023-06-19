@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.18;
 
-import {IChefIncentivesController} from './interfaces/IChefIncentivesController.sol';
-import {IUniswapV3PositionManager} from './interfaces/IUniswapV3PositionManager.sol';
-import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
-import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
-import {IERC721} from '@openzeppelin/contracts/token/ERC721/IERC721.sol';
-import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
+import {IChefIncentivesController} from "./interfaces/IChefIncentivesController.sol";
+import {IUniswapV3PositionManager} from "./interfaces/IUniswapV3PositionManager.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   using SafeMath for uint;
@@ -29,7 +29,13 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   event TeamRewardFeeUpdated(uint256 fee);
   event MintersUpdated(address[] minters);
   event IncentivesControllerUpdated(address indexed controller);
-  event PositionConfigUpdated(address indexed token0, address indexed token1, uint24 fee, int24 tickLower, int24 tickUpper);
+  event PositionConfigUpdated(
+    address indexed token0,
+    address indexed token1,
+    uint24 fee,
+    int24 tickLower,
+    int24 tickUpper
+  );
   event RewardAdded(address indexed token);
   event DelegateExitUpdated(address indexed user, address indexed delegatee);
   event Kicked(address indexed user, uint256 indexed nftId);
@@ -100,11 +106,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   IERC20 public immutable rewardToken;
   address public immutable rewardTokenVault;
 
-  address public immutable token0;
-  address public immutable token1;
-  uint256 public immutable fee;
-  int24 public immutable tickLower;
-  int24 public immutable tickUpper;
+  PositionConfig private posConfig;
 
   address public teamRewardVault;
   uint256 public teamRewardFee = 2000; // 1% = 100
@@ -120,19 +122,15 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   mapping(address => address) public exitDelegatee;
 
   constructor(IERC721 _nft, PositionConfig memory _posConfig, IERC20 _rewardToken, address _rewardTokenVault) {
-    require(address(_nft) != address(0), 'nft zero address');
-    require(_posConfig.token0 != address(0), 'token0 zero address');
-    require(_posConfig.token1 != address(0), 'token1 zero address');
-    require(_posConfig.token0 != _posConfig.token1, 'same tokens');
-    require(_posConfig.tickLower < _posConfig.tickUpper, 'invalid tick range');
-    require(address(_rewardToken) != address(0), 'rewardToken zero address');
-    require(_rewardTokenVault != address(0), 'rewardTokenVault zero address');
+    require(address(_nft) != address(0), "nft zero address");
+    require(_posConfig.token0 != address(0), "token0 zero address");
+    require(_posConfig.token1 != address(0), "token1 zero address");
+    require(_posConfig.token0 != _posConfig.token1, "same tokens");
+    require(_posConfig.tickLower < _posConfig.tickUpper, "invalid tick range");
+    require(address(_rewardToken) != address(0), "rewardToken zero address");
+    require(_rewardTokenVault != address(0), "rewardTokenVault zero address");
     nft = _nft;
-    token0 = _posConfig.token0;
-    token1 = _posConfig.token1;
-    fee = _posConfig.fee;
-    tickLower = _posConfig.tickLower;
-    tickUpper = _posConfig.tickUpper;
+    posConfig = _posConfig;
     rewardToken = _rewardToken;
     rewardTokenVault = _rewardTokenVault;
     rewardTokens.push(address(_rewardToken));
@@ -141,18 +139,18 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   }
 
   function setTeamRewardVault(address vault) external onlyOwner {
-    require(vault != address(0), 'zero address');
+    require(vault != address(0), "zero address");
     teamRewardVault = vault;
     emit TeamRewardVaultUpdated(vault);
   }
 
-  function setTeamRewardFee(uint256 fee) external onlyOwner {
-    require(fee <= 5000, 'fee too high'); // max 50%
-    teamRewardFee = fee;
-    emit TeamRewardFeeUpdated(fee);
+  function setTeamRewardFee(uint256 _fee) external onlyOwner {
+    require(_fee <= 5000, "fee too high"); // max 50%
+    teamRewardFee = _fee;
+    emit TeamRewardFeeUpdated(_fee);
   }
 
-  function getMinters() external view returns(address[] memory){
+  function getMinters() external view returns (address[] memory) {
     return minters.values();
   }
 
@@ -168,26 +166,22 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   }
 
   function setIncentivesController(IChefIncentivesController _controller) external onlyOwner {
-    require(address(_controller) != address(0), 'zero address');
+    require(address(_controller) != address(0), "zero address");
     incentivesController = _controller;
     emit IncentivesControllerUpdated(address(_controller));
   }
 
-   // Add a new reward token to be distributed to stakers
+  // Add a new reward token to be distributed to stakers
   function addReward(address _rewardsToken) external onlyOwner {
-    require(_rewardsToken != address(0), 'zero address');
-    require(rewardData[_rewardsToken].lastUpdateTime == 0, 'reward token already added');
+    require(_rewardsToken != address(0), "zero address");
+    require(rewardData[_rewardsToken].lastUpdateTime == 0, "reward token already added");
     rewardTokens.push(_rewardsToken);
     rewardData[_rewardsToken].lastUpdateTime = block.timestamp;
     rewardData[_rewardsToken].periodFinish = block.timestamp;
     emit RewardAdded(_rewardsToken);
   }
 
-  function accountLiquidity(address account) external view returns(
-    uint256 total,
-    uint256 locked,
-    uint256 unlockable
-  ) {
+  function accountLiquidity(address account) external view returns (uint256 total, uint256 locked, uint256 unlockable) {
     total = liquidities[account];
     uint256[] memory nftIds = lockedNFTs[account].values();
     for (uint i = 0; i < nftIds.length; i++) {
@@ -201,7 +195,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     }
   }
 
-  function accountAllNFTs(address account) external view returns(LockedNFT[] memory allData) {
+  function accountAllNFTs(address account) external view returns (LockedNFT[] memory allData) {
     uint256[] memory nftIds = lockedNFTs[account].values();
     allData = new LockedNFT[](nftIds.length);
     for (uint i = 0; i < nftIds.length; i++) {
@@ -210,9 +204,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     }
   }
 
-  function accountLockedNFTs(address account) external view returns(
-    LockedNFT[] memory lockedData
-  ) {
+  function accountLockedNFTs(address account) external view returns (LockedNFT[] memory lockedData) {
     uint256 count;
     uint256[] memory nftIds = lockedNFTs[account].values();
     for (uint i = 0; i < nftIds.length; i++) {
@@ -232,9 +224,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     }
   }
 
-  function accountUnlockableNFTs(address account) external view returns(
-    LockedNFT[] memory unlockableData
-  ) {
+  function accountUnlockableNFTs(address account) external view returns (LockedNFT[] memory unlockableData) {
     uint256 count;
     uint256[] memory nftIds = lockedNFTs[account].values();
     for (uint i = 0; i < nftIds.length; i++) {
@@ -255,7 +245,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   }
 
   // Information on the 'earned' balances of a user
-  function earnedBalances(address user) view external returns (uint256 total, LockedBalance[] memory earningsData) {
+  function earnedBalances(address user) external view returns (uint256 total, LockedBalance[] memory earningsData) {
     LockedBalance[] memory earnings = userEarnings[user];
     uint256 idx;
     for (uint256 i = 0; i < earnings.length; i++) {
@@ -271,11 +261,9 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     return (total, earningsData);
   }
 
-  function withdrawableBalance(address user) view public returns (
-    uint256 amount,
-    uint256 penaltyAmount,
-    uint256 amountWithoutPenalty
-  ) {
+  function withdrawableBalance(
+    address user
+  ) public view returns (uint256 amount, uint256 penaltyAmount, uint256 amountWithoutPenalty) {
     Balances memory bal = balances[user];
     uint256 earned = bal.earned;
     if (earned > 0) {
@@ -298,7 +286,12 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     rewardDatas = new RewardData[](rewardTokens.length);
     for (uint256 i = 0; i < rewardDatas.length; i++) {
       rewardDatas[i].token = rewardTokens[i];
-      rewardDatas[i].amount = _earned(account, rewardDatas[i].token, liquidities[account], _rewardPerToken(rewardTokens[i], liquiditySupply)).div(PRECISION);
+      rewardDatas[i].amount = _earned(
+        account,
+        rewardDatas[i].token,
+        liquidities[account],
+        _rewardPerToken(rewardTokens[i], liquiditySupply)
+      ).div(PRECISION);
     }
     return rewardDatas;
   }
@@ -312,13 +305,26 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     _updateReward(sender);
     for (uint256 i = 0; i < nftIds.length; i++) {
       uint256 nftId = nftIds[i];
-      ( , , address _token0, address _token1, uint24 _fee, int24 _tickLower, int24 _tickUpper, uint128 liquidity, , , , ) = IUniswapV3PositionManager(address(nft)).positions(nftId);
-      require(tickLower == _tickLower, 'Invalid lower tick');
-      require(tickUpper == _tickUpper, 'Invalid upper tick');
-      require(fee == _fee, 'Invalid fee');
-      require(token0 == _token0, 'Invalid token0');
-      require(token1 == _token1, 'Invalid token1');
-      require(liquidity > 0, 'Invalid liquidity');
+      (
+        ,
+        ,
+        address _token0,
+        address _token1,
+        uint24 _fee,
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 liquidity,
+        ,
+        ,
+        ,
+
+      ) = IUniswapV3PositionManager(address(nft)).positions(nftId);
+      require(posConfig.tickLower == _tickLower, "Invalid lower tick");
+      require(posConfig.tickUpper == _tickUpper, "Invalid upper tick");
+      require(posConfig.fee == _fee, "Invalid fee");
+      require(posConfig.token0 == _token0, "Invalid token0");
+      require(posConfig.token1 == _token1, "Invalid token1");
+      require(liquidity > 0, "Invalid liquidity");
       lockedNFTs[sender].add(nftId);
       nfts[nftId].owner = sender;
       nfts[nftId].liquidity = liquidity;
@@ -360,7 +366,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     _updateReward(sender);
     for (uint256 i = 0; i < nftIds.length; i++) {
       uint256 nftId = nftIds[i];
-      require(lockedNFTs[sender].contains(nftId), 'Not locked');
+      require(lockedNFTs[sender].contains(nftId), "Not locked");
       if (nfts[nftId].unlockTime <= block.timestamp || publicExitAreSet) {
         uint256 liquidity = nfts[nftId].liquidity;
         liquiditySupply = liquiditySupply.sub(liquidity);
@@ -374,8 +380,8 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   }
 
   function mint(address user, uint256 amount) external {
-    require(user != address(0), 'zero address');
-    require(minters.contains(msg.sender), '!minter');
+    require(user != address(0), "zero address");
+    require(minters.contains(msg.sender), "!minter");
     if (amount == 0) return;
     _updateReward(user);
     rewardToken.safeTransferFrom(rewardTokenVault, address(this), amount);
@@ -389,10 +395,10 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     uint256 unlockTime = block.timestamp.div(rewardsDuration).mul(rewardsDuration).add(vestingDuration);
     LockedBalance[] storage earnings = userEarnings[user];
     uint256 idx = earnings.length;
-    if (idx == 0 || earnings[idx-1].unlockTime < unlockTime) {
+    if (idx == 0 || earnings[idx - 1].unlockTime < unlockTime) {
       earnings.push(LockedBalance({amount: amount, unlockTime: unlockTime}));
     } else {
-      earnings[idx-1].amount = earnings[idx-1].amount.add(amount);
+      earnings[idx - 1].amount = earnings[idx - 1].amount.add(amount);
     }
     emit Mint(user, amount);
   }
@@ -405,9 +411,9 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
 
   // Withdraw full unlocked balance
   function exit(address onBehalfOf) external {
-    require(onBehalfOf == msg.sender || exitDelegatee[onBehalfOf] == msg.sender, 'Not authorized');
+    require(onBehalfOf == msg.sender || exitDelegatee[onBehalfOf] == msg.sender, "Not authorized");
     _updateReward(onBehalfOf);
-    (uint256 amount, uint256 penaltyAmount,) = withdrawableBalance(onBehalfOf);
+    (uint256 amount, uint256 penaltyAmount, ) = withdrawableBalance(onBehalfOf);
     delete userEarnings[onBehalfOf];
     Balances storage bal = balances[onBehalfOf];
     bal.earned = 0;
@@ -426,7 +432,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     if (bal.earned > 0) {
       uint256 amount;
       uint256 length = userEarnings[msg.sender].length;
-      if (userEarnings[msg.sender][length - 1].unlockTime <= block.timestamp)  {
+      if (userEarnings[msg.sender][length - 1].unlockTime <= block.timestamp) {
         amount = bal.earned;
         delete userEarnings[msg.sender];
       } else {
@@ -469,7 +475,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
         // rewards were sent to the contract or accrued via uToken interest
         Reward storage r = rewardData[token];
         uint256 periodFinish = r.periodFinish;
-        require(periodFinish != 0, 'Unknown reward token');
+        require(periodFinish != 0, "Unknown reward token");
         uint256 balance = r.balance;
         if (periodFinish < block.timestamp.add(rewardsDuration - rewardLookback)) {
           uint256 unseen = IERC20(token).balanceOf(address(this)).sub(balance);
@@ -492,12 +498,14 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     if (_supply == 0) {
       return rewardData[_rewardsToken].rewardPerTokenStored;
     }
-    return rewardData[_rewardsToken].rewardPerTokenStored.add(
-      lastTimeRewardApplicable(_rewardsToken)
-      .sub(rewardData[_rewardsToken].lastUpdateTime)
-      .mul(rewardData[_rewardsToken].rewardRate)
-      .mul(PRECISION).div(_supply)
-    );
+    return
+      rewardData[_rewardsToken].rewardPerTokenStored.add(
+        lastTimeRewardApplicable(_rewardsToken)
+          .sub(rewardData[_rewardsToken].lastUpdateTime)
+          .mul(rewardData[_rewardsToken].rewardRate)
+          .mul(PRECISION)
+          .div(_supply)
+      );
   }
 
   function _earned(
@@ -506,9 +514,10 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
     uint256 _balance,
     uint256 _currentRewardPerToken
   ) internal view returns (uint) {
-    return _balance.mul(
-      _currentRewardPerToken.sub(userRewardPerTokenPaid[_user][_rewardsToken])
-    ).div(PRECISION).add(rewards[_user][_rewardsToken]);
+    return
+      _balance.mul(_currentRewardPerToken.sub(userRewardPerTokenPaid[_user][_rewardsToken])).div(PRECISION).add(
+        rewards[_user][_rewardsToken]
+      );
   }
 
   function _notifyReward(address _rewardsToken, uint256 reward) internal {
@@ -552,9 +561,17 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   }
 
   function publicExit() external onlyOwner {
-    require(!publicExitAreSet, 'public exit are set');
+    require(!publicExitAreSet, "public exit are set");
     publicExitAreSet = true;
     emit PublicExit();
+  }
+
+  /**
+   * @notice Get position config
+   * @return PositionConfig struct
+   */
+  function getPosConfig() external view returns (PositionConfig memory) {
+    return posConfig;
   }
 
   /**
@@ -562,9 +579,10 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
    * @param users List of users to kick
    */
   function kick(address[] calldata users) external onlyOwner {
-    require(publicExitAreSet, 'public exit not set');
+    require(publicExitAreSet, "public exit not set");
     for (uint256 i = 0; i < users.length; i++) {
       address user = users[i];
+      require(user != address(0), "user zero address");
       uint256[] memory nftIds = lockedNFTs[user].values();
       for (uint256 j = 0; j < nftIds.length; j++) {
         uint256 nftId = nftIds[j];
@@ -578,5 +596,4 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
       }
     }
   }
-
 }

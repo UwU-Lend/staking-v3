@@ -2,6 +2,7 @@ require("dotenv").config();
 
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomiclabs/hardhat-etherscan";
+import "hardhat-contract-sizer";
 
 import { ENetwork } from "./enums/network.enum";
 import { HardhatUserConfig } from "hardhat/config";
@@ -19,7 +20,7 @@ const config: HardhatUserConfig = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
+        runs: 1000,
       },
     },
   },

@@ -4,6 +4,7 @@ import { deployIncentivesController, deployMultiFeeDistribution } from "../../he
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { setHRE } from "../../helpers/utils";
 import { task } from "hardhat/config";
+import { waitTx } from "../../helpers/contracts-helpers";
 
 type TaskArgs = {};
 
@@ -25,5 +26,5 @@ task("deploy:staking", "Deploy staking contract")
     setHRE(hre);
     const treasury: MultiFeeDistributionUNIV3POS = await deployMultiFeeDistribution(NFT, POS_CONFIG, REWARD_TOKEN, REWARD_TOKEN_VAULT);
     const incentivesController: IncentivesControllerV3 = await deployIncentivesController(POOL_CONFIGURATOR, treasury.address, INCENTIVES_CONTROLLER);
-
+    // await waitTx(await treasury.setIncentivesController(incentivesController.address));
   });
