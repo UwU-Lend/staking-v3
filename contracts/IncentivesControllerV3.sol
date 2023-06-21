@@ -253,7 +253,7 @@ contract IncentivesControllerV3 is Ownable {
     initiateUserInfo(_user, msg.sender);
     initiateUserBaseClaimable(_user);
     PoolInfo storage pool = poolInfo[msg.sender];
-    require(pool.lastRewardTime != 0);
+    require(pool.lastRewardTime != 0, "pool not registered");
     _updateEmissions();
     _updatePool(pool, totalAllocPoint);
     UserInfo storage user = userInfo[msg.sender][_user];
@@ -306,7 +306,7 @@ contract IncentivesControllerV3 is Ownable {
     userBaseClaimable[_user] = 0;
     for (uint i = 0; i < _tokens.length; i++) {
       PoolInfo storage pool = poolInfo[_tokens[i]];
-      require(pool.lastRewardTime != 0);
+      require(pool.lastRewardTime != 0, "pool not registered");
       _updatePool(pool, totalAllocPoint);
       UserInfo storage user = userInfo[_tokens[i]][_user];
       uint256 rewardDebt = user.amount.mul(pool.accRewardPerShare).div(1e12);

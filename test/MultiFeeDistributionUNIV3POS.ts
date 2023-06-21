@@ -19,6 +19,11 @@ type WithdrawableBalanceOutput = [BigNumber, BigNumber, BigNumber] & {
   amountWithoutPenalty: BigNumber;
 };
 
+type EarnedBalancesOutput = [BigNumber, MultiFeeDistributionUNIV3POS.LockedBalanceStructOutput[]] & {
+  total: BigNumber;
+  earningsData: MultiFeeDistributionUNIV3POS.LockedBalanceStructOutput[];
+};
+
 type RewardDataOutput = {
   periodFinish: BigNumber;
   rewardRate: BigNumber;
@@ -332,6 +337,23 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       await expect(treasury.connect(recipient1).lock([nftId1])).to.be.not.rejected;
       await expect(treasury.connect(recipient2).lock([nftId2])).to.be.rejectedWith("Invalid token1");
     });
+    it("Should be reverted if liquidity zero", async () => {
+      const {treasury, nft} = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const mintParams: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 0,
+      };
+      await nft.mint(mintParams);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      await nft.connect(recipient).approve(treasury.address, nftId);
+      await expect(treasury.connect(recipient).lock([nftId])).to.be.rejectedWith("Invalid liquidity");
+    });
   });
   describe("WithdrawExpiredLocks", () => {
     it("Should be able withdraw expired locks", async () => {
@@ -639,6 +661,7 @@ describe("MultiFeeDistributionUNIV3POS", () => {
     });
   });
   describe("accountUnlockableNFTs", () => {
+    ``;
     it("Should be able to get unlockable nfts", async () => {
       const {treasury, nft} = await loadFixture(fixture);
       const [recipient] = await ethers.getSigners();
@@ -725,6 +748,37 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       const earnedBalances: {total: BigNumber} = await treasury.earnedBalances(recipient.address);
       expect(earnedBalances.total).to.be.equal(amountInWei);
     });
+    it("Should be reverted if not minter", async () => {
+      const {treasury} = await loadFixture(fixture);
+      const [notMinter, recipient] = await ethers.getSigners();
+      const amountInWei = ethers.utils.parseEther("1000");
+      await expect(treasury.connect(notMinter).mint(recipient.address, amountInWei)).to.be.revertedWith("!minter");
+    });
+    it("Should be reverted if recipient address zero", async () => {
+      const {treasury, minterSigner} = await loadFixture(fixture);
+      const amountInWei = ethers.utils.parseEther("1000");
+      await expect(treasury.connect(minterSigner).mint(ethers.constants.AddressZero, amountInWei)).to.be.revertedWith(
+        "user address zero"
+      );
+    });
+    it("Should be not reverted if amount zero", async () => {
+      const {treasury, minterSigner} = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      await expect(treasury.connect(minterSigner).mint(recipient.address, 0)).to.be.not.rejected;
+    });
+    it("Should be correct earned balances: mint -> wait (1 day) -> mint", async () => {
+      const {treasury, minterSigner} = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const amountInWe1 = ethers.utils.parseEther("1000");
+      const amountInWe2 = ethers.utils.parseEther("2000");
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWe1);
+      await time.increase(86400 * 1);
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWe2);
+      const balance: EarnedBalancesOutput = await treasury.earnedBalances(recipient.address);
+      expect(balance.total).to.be.equal(amountInWe1.add(amountInWe2));
+      expect(balance.earningsData.length).to.be.equal(1);
+      expect(balance.earningsData[0].amount).to.be.equal(amountInWe1.add(amountInWe2));
+    });
   });
   describe("earnedBalances", () => {
     it("Should be able to get earned balances", async () => {
@@ -761,21 +815,25 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       expect(balance.total).to.be.equal(amountInWei);
       expect(balance.earningsData.length).to.be.equal(1);
       expect(balance.earningsData[0].amount).to.be.equal(amountInWei);
-      // await treasury.connect(recipient).withdraw();
     });
-    it("Should be return correct earned balances: mint -> wait (vesting duration) -> mint -> wait (vesting duration) -> mint", async () => {
+    it("Should be return correct earned balances: mint -> wait (vesting duration) -> mint -> wait (5 days) -> mint -> wait (5 days)", async () => {
       const {treasury, minterSigner} = await loadFixture(fixture);
       const [, recipient] = await ethers.getSigners();
-      const amountInWei: BigNumber = ethers.utils.parseEther("1000");
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      const amountInWei1: BigNumber = ethers.utils.parseEther("1000");
+      const amountInWei2: BigNumber = ethers.utils.parseEther("2000");
+      const amountInWei3: BigNumber = ethers.utils.parseEther("3000");
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei1);
       await time.increase(86400 * 28);
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
-      await time.increase(86400 * 28);
-      await treasury.connect(minterSigner).mint(recipient.address, amountInWei);
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei2);
+      await time.increase(86400 * 7);
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei3);
+      await time.increase(86400 * 7);
       const balance = await treasury.earnedBalances(recipient.address);
-      expect(balance.total).to.be.equal(amountInWei);
-      expect(balance.earningsData.length).to.be.equal(1);
-      expect(balance.earningsData[0].amount).to.be.equal(amountInWei);
+      console.log("Balance", balance);
+      expect(balance.total).to.be.equal(amountInWei2.add(amountInWei3));
+      expect(balance.earningsData.length).to.be.equal(2);
+      expect(balance.earningsData[0].amount).to.be.equal(amountInWei2);
+      expect(balance.earningsData[1].amount).to.be.equal(amountInWei3);
     });
   });
   describe("withdrawableBalance", () => {
@@ -928,6 +986,13 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       expect(treasuryBalances1).to.be.equal(amountInWei0.div(2));
       expect(ownerBalances1).to.be.equal(amountInWei0.div(2).add(ownerBalances0));
     });
+    it("Should be rejected it sender not authorized", async () => {
+      const {treasury} = await loadFixture(fixture);
+      const [authorizedSigner, notAuthorizedSigner] = await ethers.getSigners();
+      await expect(treasury.connect(authorizedSigner).exit(notAuthorizedSigner.address)).to.be.revertedWith(
+        "Not authorized"
+      );
+    });
   });
   describe("withdraw", () => {
     it("Should be nothing if not enough time has passed", async () => {
@@ -977,6 +1042,28 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       await treasury.connect(recipient).withdraw();
       const ownerBalances1: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
       expect(ownerBalances1).to.be.equal(amountInWei0.add(ownerBalances0));
+    });
+    it("Should be able to withdraw if earned = 0", async () => {
+      const {treasury} = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      await expect(treasury.connect(recipient).withdraw()).to.be.not.reverted;
+    });
+    it("Should be correct withdraw by scenario: mint -> wait (vesting duration) -> mint -> wait (1 day) -> withdraw -> wait (1 day) -> withdraw", async () => {
+      const {treasury, minterSigner, tokens} = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const amountInWei1: BigNumber = ethers.utils.parseEther("1000");
+      const amountInWei2: BigNumber = ethers.utils.parseEther("2000");
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei1);
+      await time.increase(86400 * 28);
+      await treasury.connect(minterSigner).mint(recipient.address, amountInWei2);
+      await time.increase(86400 * 1);
+      const balanceBefore: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
+      await expect(treasury.connect(recipient).withdraw()).to.be.not.reverted;
+      await time.increase(86400 * 1);
+      await expect(treasury.connect(recipient).withdraw()).to.be.not.reverted;
+      const balanceAfter: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
+      console.log("Balances", balanceBefore.toString(), balanceAfter.toString());
+      expect(balanceAfter.sub(balanceBefore)).to.be.equal(amountInWei1);
     });
   });
   describe("GetReward", () => {
@@ -1072,6 +1159,96 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       expect(owner0DaiBalances1.sub(owner0DaiBalances0)).to.be.equal(needDai0);
       expect(owner2UwuBalances1.sub(owner2UwuBalances0)).to.be.equal(needUwu2);
       expect(owner2DaiBalances1.sub(owner2DaiBalances0)).to.be.equal(needDai2);
+    });
+    it("Should be rejected if reward token not registered", async () => {
+      const {treasury, tokens} = await loadFixture(fixture);
+      await expect(treasury.getReward([tokens.contracts.dai.address])).to.be.rejectedWith("Unknown reward token");
+    });
+    it("Should be skipped notify unseen by scenario: transfer -> getReward -> transfer -> wait (less 1 day) -> getReward", async () => {
+      const {treasury, tokens} = await loadFixture(fixture);
+      await treasury.addReward(tokens.contracts.dai.address);
+      const amountInWe1 = ethers.utils.parseEther("1000");
+      const amountInWe2 = ethers.utils.parseEther("2000");
+      await tokens.contracts.dai.connect(tokens.holders.dai).transfer(treasury.address, amountInWe1);
+      await treasury.getReward([tokens.contracts.dai.address]);
+      await tokens.contracts.dai.connect(tokens.holders.dai).transfer(treasury.address, amountInWe2);
+      await treasury.getReward([tokens.contracts.dai.address]);
+      const rewardData = await treasury.rewardData(tokens.contracts.dai.address);
+      expect(rewardData.balance).to.be.equal(amountInWe1);
+    });
+    it("Should be skipped notify unseen by scenario: transfer -> getReward -> transfer -> wait (gte 1 day) -> getReward", async () => {
+      const {treasury, tokens} = await loadFixture(fixture);
+      await treasury.addReward(tokens.contracts.dai.address);
+      const amountInWe1 = ethers.utils.parseEther("1000");
+      const amountInWe2 = ethers.utils.parseEther("2000");
+      await tokens.contracts.dai.connect(tokens.holders.dai).transfer(treasury.address, amountInWe1);
+      await treasury.getReward([tokens.contracts.dai.address]);
+      await tokens.contracts.dai.connect(tokens.holders.dai).transfer(treasury.address, amountInWe2);
+      await time.increase(86400 * 1);
+      await treasury.getReward([tokens.contracts.dai.address]);
+      const rewardData = await treasury.rewardData(tokens.contracts.dai.address);
+      expect(rewardData.balance).to.be.equal(amountInWe1.add(amountInWe2));
+    });
+    it("Should be adjust reward", async () => {
+      const {treasury, tokens, nft} = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const fee: BigNumber = await treasury.teamRewardFee();
+      const teamRewardVault = "0x0000000000000000000000000000000000000123";
+      const params: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      await nft.mint(params);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      await nft.connect(recipient).approve(treasury.address, nftId);
+      await treasury.connect(recipient).lock([nftId]);
+      await treasury.setTeamRewardVault(teamRewardVault);
+      await treasury.addReward(tokens.contracts.dai.address);
+      const amountInWe = ethers.utils.parseEther("1000");
+      await tokens.contracts.dai.connect(tokens.holders.dai).transfer(treasury.address, amountInWe);
+      await time.increase(86400 * 1);
+      await treasury.connect(recipient).getReward([tokens.contracts.dai.address]);
+      await time.increase(86400 * 7);
+      await treasury.connect(recipient).getReward([tokens.contracts.dai.address]);
+      const balanceRecipient: BigNumber = await tokens.contracts.dai.balanceOf(recipient.address);
+      const balanceTeamRewardVault: BigNumber = await tokens.contracts.dai.balanceOf(teamRewardVault);
+      const feeAmount: BigNumber = amountInWe.mul(fee).div(10000);
+      const amount = amountInWe.sub(feeAmount);
+      expect(feeAmount.sub(balanceTeamRewardVault)).to.be.lte(1);
+      expect(amount.sub(balanceRecipient)).to.be.lte(1);
+    });
+    it("Should be don't call transfer token if amount = 0", async () => {
+      const {treasury, tokens, nft} = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const teamRewardVault = "0x0000000000000000000000000000000000000123";
+      const params: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      await nft.mint(params);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      await nft.connect(recipient).approve(treasury.address, nftId);
+      await treasury.connect(recipient).lock([nftId]);
+      await treasury.setTeamRewardVault(teamRewardVault);
+      await treasury.addReward(tokens.contracts.dai.address);
+      const amountInWe = 1;
+      await tokens.contracts.dai.connect(tokens.holders.dai).transfer(treasury.address, amountInWe);
+      await time.increase(86400 * 1);
+      await treasury.connect(recipient).getReward([tokens.contracts.dai.address]);
+      await time.increase(86400 * 7);
+      await treasury.connect(recipient).getReward([tokens.contracts.dai.address]);
+      const balanceTeamRewardVault: BigNumber = await tokens.contracts.dai.balanceOf(teamRewardVault);
+      expect(balanceTeamRewardVault).to.be.equal(0);
     });
   });
   describe("addReward", () => {
@@ -1173,6 +1350,11 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       const publicExitAreSet1: boolean = await treasury.publicExitAreSet();
       expect(publicExitAreSet0).to.be.equal(false);
       expect(publicExitAreSet1).to.be.equal(true);
+    });
+    it("Should be rejected if public exit flag already set", async () => {
+      const {treasury} = await loadFixture(fixture);
+      await expect(treasury.publicExit()).to.be.not.rejected;
+      await expect(treasury.publicExit()).to.be.rejectedWith("public exit are set");
     });
   });
   describe("setTeamRewardVault", () => {
@@ -1277,6 +1459,34 @@ describe("MultiFeeDistributionUNIV3POS", () => {
         "Ownable: caller is not the owner"
       );
       await expect(treasury.connect(owner).kick([account.address])).to.be.not.rejected;
+    });
+    it("Should be reverted if users any address equal zero", async () => {
+      const {treasury} = await loadFixture(fixture);
+      await treasury.publicExit();
+      await expect(treasury.kick([ethers.constants.AddressZero])).to.be.rejectedWith("user zero address");
+    });
+    it("Should be nft balance change after kicked", async () => {
+      const {treasury, nft} = await loadFixture(fixture);
+      const [, recipient] = await ethers.getSigners();
+      const params: UniswapNFTMock.MintParamsStruct = {
+        recipient: recipient.address,
+        token0: POSITION_CONFIG.token0,
+        token1: POSITION_CONFIG.token1,
+        fee: POSITION_CONFIG.fee,
+        tickLower: POSITION_CONFIG.tickLower,
+        tickUpper: POSITION_CONFIG.tickUpper,
+        liquidity: 100,
+      };
+      await nft.mint(params);
+      const nftId: BigNumber = await nft.tokenOfOwnerByIndex(recipient.address, 0);
+      await nft.connect(recipient).approve(treasury.address, nftId);
+      await treasury.connect(recipient).lock([nftId]);
+      const nftBalanceBefore: BigNumber = await nft.balanceOf(recipient.address);
+      await treasury.publicExit();
+      await treasury.kick([recipient.address]);
+      const nftBalanceAfter: BigNumber = await nft.balanceOf(recipient.address);
+      expect(nftBalanceBefore).to.be.equal(0);
+      expect(nftBalanceAfter).to.be.equal(1);
     });
   });
 });

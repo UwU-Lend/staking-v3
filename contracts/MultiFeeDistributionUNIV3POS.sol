@@ -380,7 +380,7 @@ contract MultiFeeDistributionUNIV3POS is ERC721Holder, Ownable {
   }
 
   function mint(address user, uint256 amount) external {
-    require(user != address(0), "zero address");
+    require(user != address(0), "user address zero");
     require(minters.contains(msg.sender), "!minter");
     if (amount == 0) return;
     _updateReward(user);
