@@ -1,3 +1,4 @@
+import { BigNumber } from 'ethers';
 import { Contract } from 'ethers';
 import { IERC20 } from '../../typechain-types';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';

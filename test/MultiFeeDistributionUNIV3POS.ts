@@ -829,7 +829,6 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       await treasury.connect(minterSigner).mint(recipient.address, amountInWei3);
       await time.increase(86400 * 7);
       const balance = await treasury.earnedBalances(recipient.address);
-      console.log("Balance", balance);
       expect(balance.total).to.be.equal(amountInWei2.add(amountInWei3));
       expect(balance.earningsData.length).to.be.equal(2);
       expect(balance.earningsData[0].amount).to.be.equal(amountInWei2);
@@ -1062,7 +1061,6 @@ describe("MultiFeeDistributionUNIV3POS", () => {
       await time.increase(86400 * 1);
       await expect(treasury.connect(recipient).withdraw()).to.be.not.reverted;
       const balanceAfter: BigNumber = await tokens.contracts.uwu.balanceOf(recipient.address);
-      console.log("Balances", balanceBefore.toString(), balanceAfter.toString());
       expect(balanceAfter.sub(balanceBefore)).to.be.equal(amountInWei1);
     });
   });

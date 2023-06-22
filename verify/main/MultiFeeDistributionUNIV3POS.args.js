@@ -4,8 +4,8 @@ module.exports = [
     "token0": "0x55C08ca52497e2f1534B59E2917BF524D4765257",
     "token1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     "fee": "10000",
-    "tickLower": "-73200",
-    "tickUpper": "-30000"
+    "tickLower": "-57800",
+    "tickUpper": "-35000"
   },
   "0x55C08ca52497e2f1534B59E2917BF524D4765257",
   "0x5776F9bf6568f252cE5Fa85F8fEe3c0d8dE914D8"

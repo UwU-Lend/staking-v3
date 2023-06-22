@@ -67,24 +67,13 @@ contract IncentivesControllerV3 is Ownable {
   // account earning rewards => receiver of rewards for this account
   // if receiver is set to address(0), rewards are paid to the earner
   // this is used to aid 3rd party contract integrations
-  mapping (address => address) public claimReceiver;
+  mapping(address => address) public claimReceiver;
 
-  event BalanceUpdated(
-    address indexed token,
-    address indexed user,
-    uint balance,
-    uint totalSupply
-  );
+  event BalanceUpdated(address indexed token, address indexed user, uint balance, uint totalSupply);
 
-  event PoolAdded(
-    address indexed token,
-    uint allocPoint
-  );
+  event PoolAdded(address indexed token, uint allocPoint);
 
-  event AllocPointUpdated(
-    address indexed token,
-    uint allocPoint
-  );
+  event AllocPointUpdated(address indexed token, uint allocPoint);
 
   bool private setuped;
   mapping(address => mapping(address => bool)) private userInfoInitiated;
@@ -122,10 +111,7 @@ contract IncentivesControllerV3 is Ownable {
   }
 
   // Update the given pool's allocation point. Can only be called by the owner.
-  function batchUpdateAllocPoint(
-    address[] calldata _tokens,
-    uint[] calldata _allocPoints
-  ) external onlyOwner {
+  function batchUpdateAllocPoint(address[] calldata _tokens, uint[] calldata _allocPoints) external onlyOwner {
     require(_tokens.length == _allocPoints.length, "arrays not same length");
     _massUpdatePools();
     uint _totalAllocPoint = totalAllocPoint;
@@ -137,16 +123,9 @@ contract IncentivesControllerV3 is Ownable {
       emit AllocPointUpdated(_tokens[i], _allocPoints[i]);
     }
     totalAllocPoint = _totalAllocPoint;
-
   }
 
-  function setOnwardIncentives(
-    address _token,
-    IOnwardIncentivesController _incentives
-  )
-    external
-    onlyOwner
-  {
+  function setOnwardIncentives(address _token, IOnwardIncentivesController _incentives) external onlyOwner {
     require(poolInfo[_token].lastRewardTime != 0, "pool not registered");
     poolInfo[_token].onwardIncentives = _incentives;
   }
@@ -161,11 +140,7 @@ contract IncentivesControllerV3 is Ownable {
     return registeredTokens.length;
   }
 
-  function claimableReward(address _user, address[] calldata _tokens)
-    external
-    view
-    returns (uint[] memory)
-  {
+  function claimableReward(address _user, address[] calldata _tokens) external view returns (uint[] memory) {
     uint256[] memory claimable = new uint256[](_tokens.length);
     for (uint256 i = 0; i < _tokens.length; i++) {
       address token = _tokens[i];
@@ -175,10 +150,7 @@ contract IncentivesControllerV3 is Ownable {
         user = userInfo[token][_user];
       } else {
         IChefIncentivesController.UserInfo memory userInfoV1 = incentivesController.userInfo(token, _user);
-        user = UserInfo({
-          amount: userInfoV1.amount,
-          rewardDebt: userInfoV1.rewardDebt
-        });
+        user = UserInfo({amount: userInfoV1.amount, rewardDebt: userInfoV1.rewardDebt});
       }
       uint256 accRewardPerShare = pool.accRewardPerShare;
       uint256 lpSupply = pool.totalSupply;
@@ -195,7 +167,7 @@ contract IncentivesControllerV3 is Ownable {
   function _updateEmissions() internal {
     uint length = emissionSchedule.length;
     if (startTime != 0 && length != 0) {
-      EmissionPoint memory e = emissionSchedule[length-1];
+      EmissionPoint memory e = emissionSchedule[length - 1];
       if (block.timestamp.sub(startTime) > e.startTimeOffset) {
         _massUpdatePools();
         rewardsPerSecond = uint(e.rewardsPerSecond);
@@ -275,21 +247,16 @@ contract IncentivesControllerV3 is Ownable {
   }
 
   function initiateUserBaseClaimable(address user) internal {
-    require(address(incentivesController) != address(0), 'incentives controller not set');
-    if(!userBaseClaimableInitiated[user]) {
+    if (!userBaseClaimableInitiated[user]) {
       userBaseClaimable[user] = incentivesController.userBaseClaimable(user);
       userBaseClaimableInitiated[user] = true;
     }
   }
 
   function initiateUserInfo(address user, address token) internal {
-    require(address(incentivesController) != address(0), 'incentives controller not set');
-    if(!userInfoInitiated[token][user]) {
+    if (!userInfoInitiated[token][user]) {
       IChefIncentivesController.UserInfo memory userInfoPrev = incentivesController.userInfo(token, user);
-      userInfo[token][user] = UserInfo({
-        amount: userInfoPrev.amount,
-        rewardDebt: userInfoPrev.rewardDebt
-      });
+      userInfo[token][user] = UserInfo({amount: userInfoPrev.amount, rewardDebt: userInfoPrev.rewardDebt});
       userInfoInitiated[token][user] = true;
     }
   }
@@ -350,7 +317,7 @@ contract IncentivesControllerV3 is Ownable {
       try incentivesController.emissionSchedule(idx) returns (IChefIncentivesController.EmissionPoint memory _point) {
         emissionSchedule.push(EmissionPoint(_point.startTimeOffset, _point.rewardsPerSecond));
         idx++;
-      } catch  {
+      } catch {
         break;
       }
     } while (true);

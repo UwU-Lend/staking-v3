@@ -1,4 +1,5 @@
 import {BigNumber, Contract} from "ethers";
+import { IERC20, OnwardIncentivesController } from "../typechain-types";
 import {POOL_CONFIGURATOR, incentivesControllerV3Fixture} from "./fixtures/IncentivesControllerV3";
 import {SnapshotRestorer, loadFixture, takeSnapshot, time} from "@nomicfoundation/hardhat-network-helpers";
 
@@ -27,6 +28,13 @@ type WithdrawableBalance = {
   penaltyAmount: BigNumber;
   amountWithoutPenalty: BigNumber;
 };
+
+type HandleActionCall = {
+  token: string;
+  user: string;
+  balance: BigNumber;
+  totalSupply: BigNumber;
+}
 
 const calcClaimableReward = (
   poolInfo: PoolInfo,
@@ -249,6 +257,67 @@ describe("IncentivesControllerV3", () => {
       expect(userInfo2.rewardDebt).to.be.equal(rewardDebt2);
       expect(userInfo3.amount).to.be.equal(balanceInWei2);
       expect(userInfo3.rewardDebt).to.be.equal(rewardDebt3);
+    });
+    it("Should be reverted if pool not registered", async () => {
+      const {controllerV3} = await loadFixture(incentivesControllerV3Fixture);
+      const [, user] = await ethers.getSigners();
+      const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(DAI_ADDRESS);
+      await ethers.provider.send("hardhat_setBalance", [DAI_ADDRESS, ethers.utils.parseEther("1000").toHexString()]);
+      await expect(
+        controllerV3
+          .connect(tokenSigner)
+          .handleAction(user.address, ethers.utils.parseEther("100"), ethers.utils.parseEther("1000"))
+      ).to.be.revertedWith("pool not registered");
+    });
+    it("Should be don't reaction by very small amount", async () => {
+      const {controllerV3} = await loadFixture(incentivesControllerV3Fixture);
+      await controllerV3.setup();
+      const [, user1] = await ethers.getSigners();
+      const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(DAI_ADDRESS);
+      const configuratorSigner: SignerWithAddress = await ethers.getImpersonatedSigner(POOL_CONFIGURATOR);
+      await ethers.provider.send("hardhat_setBalance", [
+        tokenSigner.address,
+        ethers.utils.parseEther("1000").toHexString(),
+      ]);
+      await ethers.provider.send("hardhat_setBalance", [
+        configuratorSigner.address,
+        ethers.utils.parseEther("1000").toHexString(),
+      ]);
+      await expect(controllerV3.connect(configuratorSigner).addPool(tokenSigner.address, 1000)).to.be.not.rejected;
+      await controllerV3.connect(tokenSigner).handleAction(user1.address, 1, ethers.utils.parseEther("100"));
+      const userBaseClaimable1: BigNumber = await controllerV3.userBaseClaimable(user1.address);
+      await controllerV3.connect(tokenSigner).handleAction(user1.address, 1, ethers.utils.parseEther("100"));
+      const userBaseClaimable2: BigNumber = await controllerV3.userBaseClaimable(user1.address);
+      expect(userBaseClaimable1).to.be.equal(0);
+      expect(userBaseClaimable2).to.be.equal(0);
+    });
+    it("Should be reverted if amount is zero", async () => {
+      const {controllerV3} = await loadFixture(incentivesControllerV3Fixture);
+      const [, user] = await ethers.getSigners();
+      const onwardIncentivesController = await ethers.deployContract("OnwardIncentivesController");
+      const configuratorSigner: SignerWithAddress = await ethers.getImpersonatedSigner(POOL_CONFIGURATOR);
+      const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(DAI_ADDRESS);
+      await ethers.provider.send("hardhat_setBalance", [
+        tokenSigner.address,
+        ethers.utils.parseEther("1000").toHexString(),
+      ]);
+      await ethers.provider.send("hardhat_setBalance", [
+        configuratorSigner.address,
+        ethers.utils.parseEther("1000").toHexString(),
+      ]);
+      await controllerV3.connect(configuratorSigner).addPool(tokenSigner.address, 1000);
+      await controllerV3.setOnwardIncentives(tokenSigner.address, onwardIncentivesController.address);
+      const lastCall1: HandleActionCall = await onwardIncentivesController.lastCall();
+      await controllerV3.connect(tokenSigner).handleAction(user.address, 0, ethers.utils.parseEther("100"));
+      const lastCall2: HandleActionCall = await onwardIncentivesController.lastCall();
+      expect(lastCall1.token).to.be.equal(ethers.constants.AddressZero);
+      expect(lastCall1.user).to.be.equal(ethers.constants.AddressZero);
+      expect(lastCall1.balance).to.be.equal(0);
+      expect(lastCall1.totalSupply).to.be.equal(0);
+      expect(lastCall2.token).to.be.equal(tokenSigner.address);
+      expect(lastCall2.user).to.be.equal(user.address);
+      expect(lastCall2.balance).to.be.equal(0);
+      expect(lastCall2.totalSupply).to.be.equal(ethers.utils.parseEther("100"));
     });
   });
   describe("claimableReward", () => {
@@ -562,6 +631,62 @@ describe("IncentivesControllerV3", () => {
       expect(calcClaimableReward1.sub(balance1)).to.be.lte(1e9);
       expect(calcClaimableReward2.sub(balance2)).to.be.gte(0);
       expect(calcClaimableReward2.sub(balance2)).to.be.lte(1e9);
+    });
+    it("Should be rejected if pool not registered", async () => {
+      const {controllerV3} = await loadFixture(incentivesControllerV3Fixture);
+      const [, user] = await ethers.getSigners();
+      await expect(controllerV3.claim(user.address, [ethers.constants.AddressZero])).to.be.revertedWith(
+        "pool not registered"
+      );
+    });
+    it("Should be minted only maxMintableTokens", async () => {
+      const {controllerV3, rewardToken, rewardMinterV3, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
+      const [, user] = await ethers.getSigners();
+      await controllerV3.setup();
+      const mintedTokens: BigNumber = await controllerV3.mintedTokens();
+      const maxMintableTokens: BigNumber = await controllerV3.maxMintableTokens();
+      const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(DAI_ADDRESS);
+      const configuratorSigner: SignerWithAddress = await ethers.getImpersonatedSigner(POOL_CONFIGURATOR);
+      await ethers.provider.send("hardhat_setBalance", [tokenSigner.address, ethers.utils.parseEther("1000").toHexString()]);
+      await ethers.provider.send("hardhat_setBalance", [configuratorSigner.address, ethers.utils.parseEther("1000").toHexString()]);
+      await controllerV3.connect(configuratorSigner).addPool(DAI_ADDRESS, 1000);
+      await controllerV3.connect(tokenSigner).handleAction(user.address, ethers.utils.parseEther("100"), ethers.utils.parseEther("100"));
+      await time.increase(86400 * 365 * 20);
+      await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther("7000000"));
+      await controllerV3.claim(user.address, [tokenSigner.address]);
+      const balance1: BigNumber = await rewardToken.balanceOf(user.address);
+      await time.increase(86400 * 365 * 1);
+      await controllerV3.claim(user.address, [tokenSigner.address]);
+      const balance12: BigNumber = await rewardToken.balanceOf(user.address);
+      expect(balance1).to.be.equal(maxMintableTokens.sub(mintedTokens));
+      expect(balance12).to.be.equal(balance1);
+    });
+    it("Should be mint tokens to receiver", async () => {
+      const {controllerV3, rewardToken, rewardMinterV3, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
+      const [, user, receiver] = await ethers.getSigners();
+      await controllerV3.setup();
+      await controllerV3.connect(user).setClaimReceiver(user.address, receiver.address);
+      const mintedTokens: BigNumber = await controllerV3.mintedTokens();
+      const maxMintableTokens: BigNumber = await controllerV3.maxMintableTokens();
+      const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(DAI_ADDRESS);
+      const configuratorSigner: SignerWithAddress = await ethers.getImpersonatedSigner(POOL_CONFIGURATOR);
+      await ethers.provider.send("hardhat_setBalance", [tokenSigner.address, ethers.utils.parseEther("1000").toHexString()]);
+      await ethers.provider.send("hardhat_setBalance", [configuratorSigner.address, ethers.utils.parseEther("1000").toHexString()]);
+      await controllerV3.connect(configuratorSigner).addPool(DAI_ADDRESS, 1000);
+      await controllerV3.connect(tokenSigner).handleAction(user.address, ethers.utils.parseEther("100"), ethers.utils.parseEther("100"));
+      await time.increase(86400 * 365 * 20);
+      await rewardToken.connect(rewardTokenHolder).transfer(rewardMinterV3.address, ethers.utils.parseEther("7000000"));
+      await controllerV3.claim(user.address, [tokenSigner.address]);
+      const userBalance1: BigNumber = await rewardToken.balanceOf(user.address);
+      const receiverBalance1: BigNumber = await rewardToken.balanceOf(receiver.address);
+      await time.increase(86400 * 365 * 1);
+      await controllerV3.claim(user.address, [tokenSigner.address]);
+      const userBalance2: BigNumber = await rewardToken.balanceOf(user.address);
+      const receiverBalance2: BigNumber = await rewardToken.balanceOf(receiver.address);
+      expect(userBalance1).to.be.equal(0);
+      expect(userBalance2).to.be.equal(0);
+      expect(receiverBalance1).to.be.equal(maxMintableTokens.sub(mintedTokens));
+      expect(receiverBalance2).to.be.equal(receiverBalance1);
     });
   });
   describe("batchUpdateAllocPoint", () => {
