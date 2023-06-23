@@ -130,10 +130,9 @@ contract IncentivesControllerV3 is Ownable {
     poolInfo[_token].onwardIncentives = _incentives;
   }
 
-  function setClaimReceiver(address _user, address _receiver) external {
-    require(msg.sender == _user, "only user can set claim receiver");
+  function setClaimReceiver(address _receiver) external {
     require(_receiver != address(0), "receiver cannot be zero address");
-    claimReceiver[_user] = _receiver;
+    claimReceiver[msg.sender] = _receiver;
   }
 
   function poolLength() external view returns (uint) {

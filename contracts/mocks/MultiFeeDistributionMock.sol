@@ -4,7 +4,6 @@ pragma solidity 0.8.18;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract MultiFeeDistributionMock {
-
   IERC20 public immutable rewardToken;
 
   constructor(IERC20 _rewardToken) {

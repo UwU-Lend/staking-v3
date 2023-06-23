@@ -6,7 +6,6 @@ import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/
 import {IUniswapV3PositionManager} from "../interfaces/IUniswapV3PositionManager.sol";
 
 contract UniswapNFTMock is IUniswapV3PositionManager, ERC721, ERC721Enumerable {
-
   struct MintParams {
     address recipient;
     address token0;
@@ -29,7 +28,6 @@ contract UniswapNFTMock is IUniswapV3PositionManager, ERC721, ERC721Enumerable {
     uint128 liquidity;
   }
 
-
   /// @dev The token ID position data
   mapping(uint256 => Position) private _positions;
   /// @dev The ID of the next token that will be minted. Skips 0
@@ -49,7 +47,11 @@ contract UniswapNFTMock is IUniswapV3PositionManager, ERC721, ERC721Enumerable {
     });
   }
 
-  function positions(uint256 tokenId) external view
+  function positions(
+    uint256 tokenId
+  )
+    external
+    view
     returns (
       uint96 nonce,
       address operator,
@@ -82,19 +84,16 @@ contract UniswapNFTMock is IUniswapV3PositionManager, ERC721, ERC721Enumerable {
     );
   }
 
-  function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
-    internal
-    override(ERC721, ERC721Enumerable)
-  {
+  function _beforeTokenTransfer(
+    address from,
+    address to,
+    uint256 tokenId,
+    uint256 batchSize
+  ) internal override(ERC721, ERC721Enumerable) {
     super._beforeTokenTransfer(from, to, tokenId, batchSize);
   }
 
-  function supportsInterface(bytes4 interfaceId)
-    public
-    view
-    override(ERC721, ERC721Enumerable)
-    returns (bool)
-  {
+  function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721Enumerable) returns (bool) {
     return super.supportsInterface(interfaceId);
   }
 }

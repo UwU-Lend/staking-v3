@@ -665,7 +665,7 @@ describe("IncentivesControllerV3", () => {
       const {controllerV3, rewardToken, rewardMinterV3, rewardTokenHolder } = await loadFixture(incentivesControllerV3Fixture);
       const [, user, receiver] = await ethers.getSigners();
       await controllerV3.setup();
-      await controllerV3.connect(user).setClaimReceiver(user.address, receiver.address);
+      await controllerV3.connect(user).setClaimReceiver(receiver.address);
       const mintedTokens: BigNumber = await controllerV3.mintedTokens();
       const maxMintableTokens: BigNumber = await controllerV3.maxMintableTokens();
       const tokenSigner: SignerWithAddress = await ethers.getImpersonatedSigner(DAI_ADDRESS);
@@ -783,26 +783,17 @@ describe("IncentivesControllerV3", () => {
     });
   });
   describe("setClaimReceiver", () => {
-    it("Should be possible called only itself", async () => {
-      const {controllerV3} = await loadFixture(incentivesControllerV3Fixture);
-      const [owner, user1, user2, claimReceiver] = await ethers.getSigners();
-      await expect(
-        controllerV3.connect(user2).setClaimReceiver(user1.address, claimReceiver.address)
-      ).to.be.rejectedWith("");
-      await expect(controllerV3.connect(user1).setClaimReceiver(user1.address, claimReceiver.address)).to.be.not
-        .rejected;
-    });
     it("Should be able set claim receiver", async () => {
       const {controllerV3} = await loadFixture(incentivesControllerV3Fixture);
       const [, user1, claimReceiver] = await ethers.getSigners();
-      await controllerV3.connect(user1).setClaimReceiver(user1.address, claimReceiver.address);
+      await controllerV3.connect(user1).setClaimReceiver(claimReceiver.address);
       expect(await controllerV3.claimReceiver(user1.address)).to.be.equal(claimReceiver.address);
     });
     it("Should be rejected if receiver address zero", async () => {
       const {controllerV3} = await loadFixture(incentivesControllerV3Fixture);
       const [, user] = await ethers.getSigners();
       await expect(
-        controllerV3.connect(user).setClaimReceiver(user.address, ethers.constants.AddressZero)
+        controllerV3.connect(user).setClaimReceiver(ethers.constants.AddressZero)
       ).to.be.rejectedWith("receiver cannot be zero address");
     });
   });

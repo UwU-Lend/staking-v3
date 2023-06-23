@@ -27,5 +27,6 @@ interface IBasePositionManager {
   }
 
   function positions(uint256 tokenId) external view returns (Position memory pos, PoolInfo memory info);
+
   function addressToPoolId(address pool) external view returns (uint80);
 }

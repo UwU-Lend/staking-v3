@@ -11,6 +11,7 @@ contract OnwardIncentivesController is IOnwardIncentivesController {
     uint256 totalSupply;
   }
   HandleActionCall public lastCall;
+
   function handleAction(address _token, address _user, uint256 _balance, uint256 _totalSupply) external {
     lastCall = HandleActionCall(_token, _user, _balance, _totalSupply);
   }
